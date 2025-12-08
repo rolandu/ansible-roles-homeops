@@ -1,0 +1,35 @@
+---
+- name: Slurp CA certificate
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/ca.crt"
+  register: ovpn_ca
+
+- name: Slurp TLS auth key
+  slurp:
+    src: "{{ easyrsa_dir }}/ta.key"
+  register: ovpn_ta
+
+- name: Slurp client certificate
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/issued/{{ client_name }}.crt"
+  register: ovpn_crt
+
+- name: Slurp client private key
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/private/{{ client_name }}.key"
+  register: ovpn_key
+
+- name: Write inline client config locally
+  delegate_to: localhost
+  become: false
+  template:
+    src: "client.ovpn.j2"
+    dest: "{{ openvpn_client_local_dir }}/{{ openvpn_server_name }}_{{ client_name }}.ovpn"
+    mode: "0600"
+  vars:
+    ovpn_client_name: "{{ client_name }}"
+    ovpn_ca_content: "{{ ovpn_ca.content | b64decode }}"
+    ovpn_ta_content: "{{ ovpn_ta.content | b64decode }}"
+    ovpn_crt_content: "{{ ovpn_crt.content | b64decode }}"
+    ovpn_key_content: "{{ ovpn_key.content | b64decode }}"
+

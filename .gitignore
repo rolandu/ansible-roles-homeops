@@ -1,0 +1,11 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Ansible
+*.retry
+
+# Ansible host artifacts
+inventory/artifacts/*

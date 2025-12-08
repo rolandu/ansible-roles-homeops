@@ -1,0 +1,85 @@
+# roles/secure_ssh/tasks/main.yml
+
+- name: "Ensure ops user exists (optional, safe if created by bootstrap)"
+  ansible.builtin.user:
+    name: "{{ ops_user }}"
+    state: present
+  # You can remove this if you fully trust the bootstrap script
+
+- name: "Ensure ops user is in sudo group"
+  ansible.builtin.user:
+    name: "{{ ops_user }}"
+    groups: sudo
+    append: yes
+
+- name: "Ensure .ssh directory exists for {{ ops_user }}"
+  ansible.builtin.file:
+    path: "/home/{{ ops_user }}/.ssh"
+    state: directory
+    owner: "{{ ops_user }}"
+    group: "{{ ops_user }}"
+    mode: "0700"
+
+- name: "Install authorized_keys for {{ ops_user }}"
+  ansible.posix.authorized_key:
+    user: "{{ ops_user }}"
+    key: "{{ item }}"
+    state: present
+    manage_dir: no   # directory already managed above
+  loop: "{{ ops_authorized_keys }}"
+  when: ops_authorized_keys | length > 0
+
+# SSH hardening
+- name: "Ensure sshd_config exists"
+  ansible.builtin.stat:
+    path: "{{ sshd_config_path }}"
+  register: sshd_conf_stat
+
+- name: "Fail if sshd_config is missing"
+  ansible.builtin.fail:
+    msg: "sshd_config not found at {{ sshd_config_path }}"
+  when: not sshd_conf_stat.stat.exists
+
+- name: "Disable SSH password authentication"
+  ansible.builtin.lineinfile:
+    path: "{{ sshd_config_path }}"
+    regexp: '^[#\s]*PasswordAuthentication\b'
+    line: 'PasswordAuthentication no'
+    state: present
+    backrefs: yes
+    backup: yes
+  notify: Restart ssh
+  when: ssh_disable_password_auth | bool
+
+- name: "Disable root SSH login"
+  ansible.builtin.lineinfile:
+    path: "{{ sshd_config_path }}"
+    regexp: '^[#\s]*PermitRootLogin\b'
+    line: 'PermitRootLogin no'
+    state: present
+    backrefs: yes
+    backup: yes
+  notify: Restart ssh
+  when: ssh_disable_root_login | bool
+
+- name: "Ensure PubkeyAuthentication is enabled (defensive)"
+  ansible.builtin.lineinfile:
+    path: "{{ sshd_config_path }}"
+    regexp: '^[#\s]*PubkeyAuthentication\b'
+    line: 'PubkeyAuthentication yes'
+    state: present
+    backrefs: yes
+    backup: yes
+  notify: Restart ssh
+
+# ---- “Test connection again” part ----
+
+- name: "Flush handlers so ssh is restarted now"
+  ansible.builtin.meta: flush_handlers
+
+- name: "Reset SSH connection (force Ansible to reconnect)"
+  ansible.builtin.meta: reset_connection
+
+- name: "Ping after SSH hardening to verify connection"
+  ansible.builtin.ping:
+

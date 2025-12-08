@@ -1,0 +1,17 @@
+# roles/ssh_users/defaults/main.yml
+
+ssh_users: []
+# Example:
+# ssh_users:
+#   - name: ops
+#     home: /home/ops
+#     extra_groups:
+#       - sudo
+#       - docker
+#     authorized_keys:
+#       - "ssh-ed25519 AAAA... roland@laptop"
+#
+#   - name: backup
+#     authorized_keys:
+#       - "ssh-ed25519 AAAA... backup@nas"
+

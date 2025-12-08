@@ -1,0 +1,33 @@
+# These can be overridden in host_vars for each environment
+openvpn_server_name: server
+openvpn_network: "10.10.0.0"
+openvpn_netmask: "255.255.255.0"
+openvpn_port: 1194
+openvpn_proto: udp
+
+home_lan_network: "10.11.0.0"
+home_lan_netmask: "255.255.255.0"
+
+# remote dirs
+easyrsa_dir: "/etc/openvpn/easy-rsa"
+openvpn_server_dir: "/etc/openvpn/server"
+ccd_dir: "/etc/openvpn/ccd"
+openvpn_client_export_dir: "/root/openvpn-clients"
+
+# local dirs
+openvpn_client_local_dir: "{{ inventory_dir }}/artifacts/{{ inventory_hostname }}/openvpn-clients"  # Where .ovpn files are written on the Ansible controller
+
+# clients & export
+openvpn_clients:
+  - homegateway          # we'll start with just this one
+
+# the client that will act as a gateway
+gateway_client_name: homegateway
+
+# should the network act as full tunnel (route everything) or split tunnel?
+openvpn_full_tunnel: false
+
+# FQDN or IP of your VPN box
+# openvpn_remote_host: "vpn.example.com"  # override in host_vars!
+
+

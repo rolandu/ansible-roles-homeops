@@ -1,0 +1,33 @@
+port {{ openvpn_port }}
+proto {{ openvpn_proto }}
+dev tun
+
+topology subnet
+server {{ openvpn_network }} {{ openvpn_netmask }}
+
+ca ca.crt
+cert server.crt
+key server.key
+dh dh.pem
+tls-auth ta.key 0
+
+client-config-dir {{ ccd_dir }}
+
+# Explicitly control tunnel mode
+{% if openvpn_full_tunnel %}
+push "redirect-gateway def1 bypass-dhcp"
+{% else %}
+push "route {{ home_lan_network }} {{ home_lan_netmask }}"
+{% endif %}
+
+# route to home network
+route {{ home_lan_network }} {{ home_lan_netmask }}
+
+keepalive 10 120
+persist-key
+persist-tun
+
+user nobody
+group nogroup
+
+verb 3

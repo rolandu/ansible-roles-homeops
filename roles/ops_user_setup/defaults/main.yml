@@ -1,0 +1,16 @@
+# roles/secure_ssh/defaults/main.yml
+
+ops_user: ops
+
+# List of public keys (strings) to install for ops user
+ops_authorized_keys: []
+
+# If true, we’ll disable password auth for SSH
+ssh_disable_password_auth: true
+
+# If true, we’ll disable root login
+ssh_disable_root_login: true
+
+# Path to sshd_config (Debian/Ubuntu default)
+sshd_config_path: /etc/ssh/sshd_config
+
