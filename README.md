@@ -1,2 +1,15 @@
 # ansible-roles-homeops
+
+> [!WARNING]
+> I am still new to do this. Use at your own risk!
+
 Ansible roles for home/family infrastructure (servers, laptops, workstations, etc.).
+
+## Conventions used in this collection:
+
+Local:
+- `artifacts`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/{{ host }}`
+
+Remote:
+- Software: all custom software such as scripts, checkouts, docker-compose should live inside of `/opt/<app>` on the host.
+- Data: all data of services that is to be persisted should live in `/srv/<app>/` on the host.
