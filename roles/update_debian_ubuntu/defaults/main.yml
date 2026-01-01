@@ -1,0 +1,12 @@
+---
+# Cache lifetime (seconds) for apt metadata refresh.
+update_debian_ubuntu_cache_valid_time: 3600
+
+# Upgrade strategy passed to apt (dist/full/safe/etc.).
+update_debian_ubuntu_upgrade_type: dist
+
+# Seconds to wait for a host to come back after rebooting.
+update_debian_ubuntu_reboot_timeout: 900
+
+# Toggle whether to reboot automatically if the system requests it.
+perform_reboot_if_needed: true

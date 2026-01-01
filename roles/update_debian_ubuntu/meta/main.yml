@@ -1,0 +1,7 @@
+galaxy_info:
+  author: rolandu
+  description: Update Debian/Ubuntu hosts and reboot if needed.
+  license: MIT
+  min_ansible_version: 2.13
+
+dependencies: []

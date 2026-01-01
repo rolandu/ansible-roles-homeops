@@ -1,0 +1,40 @@
+---
+- name: Refresh apt cache (valid for {{ update_debian_ubuntu_cache_valid_time }} seconds)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ update_debian_ubuntu_cache_valid_time | int }}"
+
+- name: Upgrade packages (incl. kernel / dist upgrades)
+  ansible.builtin.apt:
+    upgrade: "{{ update_debian_ubuntu_upgrade_type }}"
+
+- name: Autoremove unused packages
+  ansible.builtin.apt:
+    autoremove: true
+
+- name: Autoclean package cache
+  ansible.builtin.apt:
+    autoclean: true
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: update_debian_ubuntu_reboot_flag
+
+- name: Reboot if needed (e.g., after kernel upgrade)
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ update_debian_ubuntu_reboot_timeout | int }}"
+  when:
+    - perform_reboot_if_needed | bool
+    - update_debian_ubuntu_reboot_flag.stat.exists
+
+- name: Show result
+  ansible.builtin.debug:
+    msg: >-
+      System updated. Reboot {{
+        'performed'
+        if perform_reboot_if_needed | bool and update_debian_ubuntu_reboot_flag.stat.exists
+        else 'skipped (disabled via perform_reboot_if_needed)'
+        if update_debian_ubuntu_reboot_flag.stat.exists
+        else 'not needed'
+      }}.
