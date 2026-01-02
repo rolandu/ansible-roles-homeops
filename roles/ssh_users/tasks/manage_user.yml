@@ -1,0 +1,30 @@
+# roles/ssh_users/tasks/manage_user.yml
+
+- name: "Check if {{ ssh_user.name }} already exists"
+  ansible.builtin.command: "getent passwd {{ ssh_user.name }}"
+  register: ssh_user_probe
+  changed_when: false
+  failed_when: false
+
+- name: "Ensure {{ ssh_user.name }} exists and add extra groups"
+  ansible.builtin.user:
+    name: "{{ ssh_user.name }}"
+    state: "{{ ssh_user.state | default('present') }}"
+    create_home: "{{ ssh_user.create_home | default(true) }}"
+    home: "{{ ssh_user.home | default(omit) }}"
+    shell: "{{ ssh_user.shell | default('/bin/bash') }}"
+    groups: "{{ ssh_user.extra_groups | default([]) | join(',') }}"
+    append: true             # DO NOT overwrite groups
+    # If no initial password provided -> lock password (SSH-key-only)
+    # If provided -> set only on create, do not rotate later
+    password_lock: "{{ (ssh_user.initial_password_hash is not defined) }}"
+    password: "{{ ssh_user.initial_password_hash | default(omit) }}"
+    update_password: on_create
+
+- name: "Expire password so {{ ssh_user.name }} must reset on first login"
+  ansible.builtin.command: "chage -d 0 {{ ssh_user.name }}"
+  when:
+    - ssh_user.initial_password_hash is defined
+    - ssh_user.initial_password_hash | length > 0
+    - ssh_user_probe.rc != 0     # only when the account was just created
+    - ssh_user.force_password_reset | default(true)
