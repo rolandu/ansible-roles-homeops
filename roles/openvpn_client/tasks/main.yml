@@ -15,12 +15,25 @@
     path: "/lib/systemd/system/openvpn@.service"
   register: _legacy_unit
 
-- name: Set service unit and config directory
+- name: Set service unit and auto config directory
   set_fact:
     openvpn_client_systemd_unit: >-
-      {{ 'openvpn-client@' + openvpn_client_name if _client_unit.stat.exists else 'openvpn@' + openvpn_client_name }}
-    openvpn_client_conf_dir: >-
+      {{
+        ('openvpn-client@' + openvpn_client_config_basename)
+        if _client_unit.stat.exists
+        else ('openvpn@' + openvpn_client_config_basename)
+      }}
+    openvpn_client_conf_dir_auto: >-
       {{ '/etc/openvpn/client' if _client_unit.stat.exists else '/etc/openvpn' }}
+
+- name: Resolve config directory override
+  set_fact:
+    openvpn_client_conf_dir: >-
+      {{
+        openvpn_client_conf_dir_auto
+        if (openvpn_client_conf_dir | default('auto')) in ['auto', '', None]
+        else openvpn_client_conf_dir
+      }}
 
 - name: Ensure client config directory exists
   file:
@@ -28,17 +41,18 @@
     state: directory
     mode: "0755"
 
-- name: Ensure local export directory exists on controller (for safety)
+- name: Validate local .ovpn artifact exists on controller
   delegate_to: localhost
-  file:
-    path: "{{ openvpn_client_local_dir }}"
-    state: directory
-    mode: "0700"
+  become: false
+  stat:
+    path: "{{ openvpn_client_local_config_file }}"
+  register: openvpn_client_local_config_stat
+  failed_when: not openvpn_client_local_config_stat.stat.exists
 
 - name: Copy inline .ovpn from controller to target as .conf
   copy:
-    src: "{{ openvpn_client_local_dir }}/{{ openvpn_client_name }}.ovpn"
-    dest: "{{ openvpn_client_conf_dir }}/{{ openvpn_client_name }}.conf"
+    src: "{{ openvpn_client_local_config_file }}"
+    dest: "{{ openvpn_client_conf_dir }}/{{ openvpn_client_config_basename }}.conf"
     owner: root
     group: root
     mode: "0600"
@@ -56,4 +70,3 @@
     name: "{{ openvpn_client_systemd_unit }}"
     enabled: yes
     state: started
-
