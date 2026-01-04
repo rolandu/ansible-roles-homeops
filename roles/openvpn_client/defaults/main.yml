@@ -1,23 +1,9 @@
 ---
-# Name of the client profile to install (without extension)
-openvpn_client_name: ovpnclient
+# Name of the client profile to install (defaults to host name)
+openvpn_client_name: "{{ inventory_hostname }}"
 
-# Name of the OpenVPN server this client connects to
-openvpn_server_name: ovpnserver
+# VPN definitions and their clients (shared with server role)
+openvpn_config: []
 
-# Where the controller stores generated .ovpn files
-# Keep in sync with the server role export path
-openvpn_client_local_dir: "{{ inventory_dir }}/artifacts/{{ openvpn_server_name }}/openvpn-clients"  # Where .ovpn files are written on the Ansible controller
-openvpn_client_local_config_file: "{{ openvpn_client_local_dir}}/{{ openvpn_server_name}}_{{openvpn_client_name}}.ovpn"
-
-# Where to install the client .conf on the managed host.
-# Use "auto" (default) to detect /etc/openvpn/client vs /etc/openvpn dynamically.
-openvpn_client_conf_dir: auto
-
-# Basename used for the .conf and systemd instance (allows overriding if desired)
-openvpn_client_config_basename: "{{ openvpn_server_name }}_{{ openvpn_client_name }}"
-
-# Enable IPv4 forwarding on this client (for gateway use)
-openvpn_client_enable_ip_forward: false
-
-
+# Global path base for exported configs on the controller
+openvpn_client_local_dir_base: "{{ inventory_dir }}/artifacts"

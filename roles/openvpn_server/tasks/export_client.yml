@@ -24,12 +24,12 @@
   become: false
   template:
     src: "client.ovpn.j2"
-    dest: "{{ openvpn_client_local_dir }}/{{ openvpn_server_name }}_{{ client_name }}.ovpn"
+    dest: "{{ client_local_config_file }}"
     mode: "0600"
   vars:
     ovpn_client_name: "{{ client_name }}"
+    ovpn_client_type: "{{ client_type | default('roaming') }}"
     ovpn_ca_content: "{{ ovpn_ca.content | b64decode }}"
     ovpn_ta_content: "{{ ovpn_ta.content | b64decode }}"
     ovpn_crt_content: "{{ ovpn_crt.content | b64decode }}"
     ovpn_key_content: "{{ ovpn_key.content | b64decode }}"
-

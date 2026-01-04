@@ -1,151 +1,39 @@
+---
+- name: Ensure VPN definitions are provided
+  assert:
+    that:
+      - openvpn_config is defined
+      - (openvpn_config | default([])) | length > 0
+    fail_msg: "Set openvpn_config to the list of VPN definitions."
 
-- name: Install OpenVPN and EasyRSA
-  apt:
-    name:
-      - openvpn
-      - easy-rsa
-    state: present
-    update_cache: yes
-
-- name: Create EasyRSA directory
-  file:
-    path: "{{ easyrsa_dir }}"
-    state: directory
-    mode: "0750"
-
-- name: Copy EasyRSA scripts into place
-  copy:
-    src: "/usr/share/easy-rsa/"
-    dest: "{{ easyrsa_dir }}/"
-    owner: root
-    group: root
-    mode: "0750"
-    remote_src: yes
-
-- name: Initialize PKI if not already present
-  command: ./easyrsa init-pki
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/pki"
-
-- name: Build CA
-  command: ./easyrsa --batch build-ca nopass
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/pki/ca.crt"
-
-- name: Build server certificate
-  command: ./easyrsa --batch build-server-full {{ openvpn_server_name }} nopass
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_server_name }}.crt"
-
-- name: Generate DH parameters
-  command: ./easyrsa gen-dh
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/pki/dh.pem"
-
-- name: Generate TLS auth key
-  command: openvpn --genkey --secret ta.key
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/ta.key"
-
-- name: Ensure OpenVPN server directory exists
-  file:
-    path: "{{ openvpn_server_dir }}"
-    state: directory
-    mode: "0750"
-
-- name: Ensure CCD directory exists
-  file:
-    path: "{{ ccd_dir }}"
-    state: directory
-    mode: "0750"
-
-- name: Copy PKI material into server dir
-  copy:
-    src: "{{ item.src }}"
-    dest: "{{ openvpn_server_dir }}/{{ item.dest }}"
-    owner: root
-    group: root
-    mode: "0600"
-    remote_src: yes
-  loop:
-    - { src: "{{ easyrsa_dir }}/pki/ca.crt", dest: "ca.crt" }
-    - { src: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_server_name }}.crt", dest: "server.crt" }
-    - { src: "{{ easyrsa_dir }}/pki/private/{{ openvpn_server_name }}.key", dest: "server.key" }
-    - { src: "{{ easyrsa_dir }}/pki/dh.pem", dest: "dh.pem" }
-    - { src: "{{ easyrsa_dir }}/ta.key", dest: "ta.key" }
-
-- name: Deploy OpenVPN server configuration
-  template:
-    src: "server.conf.j2"
-    dest: "{{ openvpn_server_dir }}/{{ openvpn_server_name }}.conf"
-    owner: root
-    group: root
-    mode: "0644"
-
-- name: Enable IPv4 forwarding
-  sysctl:
-    name: net.ipv4.ip_forward
-    value: "1"
-    state: present
-    reload: yes
-
-- name: Enable and start OpenVPN service
-  service:
-    name: "openvpn-server@{{ openvpn_server_name }}"
-    enabled: yes
-    state: started
-
-# Settting up clients
-- name: Ensure CCD directory exists
-  file:
-    path: "{{ ccd_dir }}"
-    state: directory
-    mode: "0750"
-
-- name: Build client certificates
-  command: ./easyrsa --batch build-client-full {{ item }} nopass
-  args:
-    chdir: "{{ easyrsa_dir }}"
-    creates: "{{ easyrsa_dir }}/pki/issued/{{ item }}.crt"
-  loop: "{{ openvpn_clients }}"
-
-- name: Create CCD for gateway client
-  copy:
-    dest: "{{ ccd_dir }}/{{ gateway_client_name }}"
-    content: "iroute {{ home_lan_network }} {{ home_lan_netmask }}\n"
-    owner: root
-    group: root
-    mode: "0640"
-
-- name: Ensure client export directory exists
-  file:
-    path: "{{ openvpn_client_export_dir }}"
-    state: directory
-    mode: "0700"
-
-- name: Enable NAT for VPN clients
-  iptables:
-    table: nat
-    chain: POSTROUTING
-    out_interface: eth0
-    source: 10.200.0.0/24
-    jump: MASQUERADE
-    comment: "NAT for VPN clients"
-
-
-- name: Export inline client configs locally
-  include_tasks: export_client.yml
-  loop: "{{ openvpn_clients }}"
+- name: Validate required fields per VPN definition
+  assert:
+    that:
+      - item.vpn_name is defined
+      - item.vpn_name | string | trim | length > 0
+      - item.server_hostname is defined
+      - item.server_hostname | string | trim | length > 0
+      - item.network is defined
+      - item.network | string | trim | length > 0
+      - item.netmask is defined
+      - item.netmask | string | trim | length > 0
+      - item.openvpn_ca_passphrase is defined
+      - item.openvpn_ca_passphrase | string | trim | length > 0
+      - item.openvpn_mgmt_password is defined
+      - item.openvpn_mgmt_password | string | trim | length > 0
+    fail_msg: "Each VPN entry must define vpn_name, server_hostname, network, netmask, openvpn_ca_passphrase, and openvpn_mgmt_password."
+  loop: "{{ openvpn_config }}"
   loop_control:
-    loop_var: client_name
+    label: "{{ item.vpn_name | default(item.server_hostname | default('undefined')) }}"
 
-
-
-
-
-
+- name: Configure OpenVPN server instances
+  include_tasks: server_instance.yml
+  loop: "{{ openvpn_config | default([]) }}"
+  loop_control:
+    loop_var: ovpn_server
+  when: >
+    (ovpn_server.server_hostname | default(inventory_hostname)) in [
+      inventory_hostname,
+      ansible_hostname | default(inventory_hostname),
+      ansible_fqdn | default(inventory_hostname)
+    ]

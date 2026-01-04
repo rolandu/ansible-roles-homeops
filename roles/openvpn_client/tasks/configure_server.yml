@@ -1,0 +1,31 @@
+---
+- name: Set per-server facts
+  set_fact:
+    openvpn_vpn_name: "{{ ovpn_server.vpn_name | default(ovpn_server.name) }}"
+    openvpn_client_name: "{{ openvpn_client_name | default(inventory_hostname) }}"
+
+- name: Derive local artifact paths
+  set_fact:
+    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients"
+    openvpn_client_local_config_file: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients/{{ openvpn_vpn_name }}_{{ openvpn_client_name }}.ovpn"
+
+- name: Select client entry from configuration
+  set_fact:
+    openvpn_client_entry: "{{ ovpn_server.clients | default([]) | selectattr('name', 'equalto', openvpn_client_name) | list | first | default({}, true) }}"
+
+- name: Derive client role from configuration
+  when: openvpn_client_entry | length > 0
+  set_fact:
+    openvpn_client_role: "{{ openvpn_client_entry.type | default('roaming') }}"
+    openvpn_client_managed: "{{ openvpn_client_entry.managed | default(true) }}"
+
+- name: Skip server if client entry is missing or client unmanaged
+  when: (openvpn_client_entry | length == 0) or not (openvpn_client_managed | default(true) | bool)
+  debug:
+    msg: "No client entry found for {{ openvpn_client_name }} under VPN {{ openvpn_vpn_name }}; skipping."
+
+- name: Manage OpenVPN client resources
+  when:
+    - openvpn_client_entry | length > 0
+    - openvpn_client_managed | bool
+  include_tasks: manage_client.yml

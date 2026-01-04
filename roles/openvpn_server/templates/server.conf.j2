@@ -5,6 +5,10 @@ dev tun
 topology subnet
 server {{ openvpn_network }} {{ openvpn_netmask }}
 
+{% if openvpn_mgmt_password | default('') | trim | length > 0 %}
+management {{ openvpn_mgmt_bind }} {{ openvpn_mgmt_port }} {{ openvpn_mgmt_password_file }}
+{% endif %}
+
 ca ca.crt
 cert server.crt
 key server.key
@@ -12,22 +16,26 @@ dh dh.pem
 tls-auth ta.key 0
 
 client-config-dir {{ ccd_dir }}
+{% if openvpn_client_to_client | bool %}
+client-to-client
+{% endif %}
+client-to-client
 
 # Explicitly control tunnel mode
 {% if openvpn_full_tunnel %}
 push "redirect-gateway def1 bypass-dhcp"
-{% else %}
-push "route {{ home_lan_network }} {{ home_lan_netmask }}"
 {% endif %}
 
-# route to home network
+# route to home network (optional)
+{% if (home_lan_network | default('') | trim | length > 0) and (home_lan_netmask | default('') | trim | length > 0) %}
 route {{ home_lan_network }} {{ home_lan_netmask }}
+{% endif %}
 
 keepalive 10 120
 persist-key
 persist-tun
 
-user nobody
-group nogroup
+user openvpn
+group openvpn
 
 verb 3

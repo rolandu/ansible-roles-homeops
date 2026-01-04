@@ -1,0 +1,85 @@
+---
+- name: Install OpenVPN client package
+  apt:
+    name: openvpn
+    state: present
+    update_cache: yes
+  register: openvpn_client_package
+  notify: Restart OpenVPN client service
+
+- name: Detect systemd unit style (openvpn-client@ or openvpn@)
+  stat:
+    path: "/lib/systemd/system/openvpn-client@.service"
+  register: _client_unit
+
+- name: Detect legacy unit
+  stat:
+    path: "/lib/systemd/system/openvpn@.service"
+  register: _legacy_unit
+
+- name: Set service unit and auto config directory
+  set_fact:
+    openvpn_client_systemd_unit: >-
+      {{
+        ('openvpn-client@' + (openvpn_vpn_name + '_' + openvpn_client_name))
+        if _client_unit.stat.exists
+        else ('openvpn@' + (openvpn_vpn_name + '_' + openvpn_client_name))
+      }}
+    openvpn_client_conf_dir: >-
+      {{ '/etc/openvpn/client' if _client_unit.stat.exists else '/etc/openvpn' }}
+
+- name: Ensure client config directory exists
+  file:
+    path: "{{ openvpn_client_conf_dir }}"
+    state: directory
+    mode: "0755"
+  notify: Restart OpenVPN client service
+
+- name: Validate local .ovpn artifact exists on controller
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "{{ openvpn_client_local_config_file }}"
+  register: openvpn_client_local_config_stat
+  failed_when: not openvpn_client_local_config_stat.stat.exists
+
+- name: Copy inline .ovpn from controller to target as .conf
+  copy:
+    src: "{{ openvpn_client_local_config_file }}"
+    dest: "{{ openvpn_client_conf_dir }}/{{ openvpn_vpn_name }}_{{ openvpn_client_name }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart OpenVPN client service
+
+- name: Enforce forwarding sysctls (gateway mode)
+  when: (openvpn_client_role | lower) == 'gateway'
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv4.conf.all.forwarding
+    - net.ipv4.conf.default.forwarding
+  notify: Restart OpenVPN client service
+
+- name: Set rp_filter to loose mode (gateway mode)
+  when: (openvpn_client_role | lower) == 'gateway'
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "2"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.conf.all.rp_filter
+    - net.ipv4.conf.default.rp_filter
+  notify: Restart OpenVPN client service
+
+- name: Enable and start OpenVPN client service
+  service:
+    name: "{{ openvpn_client_systemd_unit }}"
+    enabled: yes
+    state: started
+  notify: Restart OpenVPN client service

@@ -1,72 +1,13 @@
 ---
-- name: Install OpenVPN client package
-  apt:
-    name: openvpn
-    state: present
-    update_cache: yes
+- name: Ensure VPN definitions are provided
+  assert:
+    that:
+      - openvpn_config is defined
+      - (openvpn_config | default([])) | length > 0
+    fail_msg: "Set openvpn_config to the list of VPN definitions."
 
-- name: Detect systemd unit style (openvpn-client@ or openvpn@)
-  stat:
-    path: "/lib/systemd/system/openvpn-client@.service"
-  register: _client_unit
-
-- name: Detect legacy unit
-  stat:
-    path: "/lib/systemd/system/openvpn@.service"
-  register: _legacy_unit
-
-- name: Set service unit and auto config directory
-  set_fact:
-    openvpn_client_systemd_unit: >-
-      {{
-        ('openvpn-client@' + openvpn_client_config_basename)
-        if _client_unit.stat.exists
-        else ('openvpn@' + openvpn_client_config_basename)
-      }}
-    openvpn_client_conf_dir_auto: >-
-      {{ '/etc/openvpn/client' if _client_unit.stat.exists else '/etc/openvpn' }}
-
-- name: Resolve config directory override
-  set_fact:
-    openvpn_client_conf_dir: >-
-      {{
-        openvpn_client_conf_dir_auto
-        if (openvpn_client_conf_dir | default('auto')) in ['auto', '', None]
-        else openvpn_client_conf_dir
-      }}
-
-- name: Ensure client config directory exists
-  file:
-    path: "{{ openvpn_client_conf_dir }}"
-    state: directory
-    mode: "0755"
-
-- name: Validate local .ovpn artifact exists on controller
-  delegate_to: localhost
-  become: false
-  stat:
-    path: "{{ openvpn_client_local_config_file }}"
-  register: openvpn_client_local_config_stat
-  failed_when: not openvpn_client_local_config_stat.stat.exists
-
-- name: Copy inline .ovpn from controller to target as .conf
-  copy:
-    src: "{{ openvpn_client_local_config_file }}"
-    dest: "{{ openvpn_client_conf_dir }}/{{ openvpn_client_config_basename }}.conf"
-    owner: root
-    group: root
-    mode: "0600"
-
-- name: Enable IPv4 forwarding (gateway mode)
-  when: openvpn_client_enable_ip_forward | bool
-  sysctl:
-    name: net.ipv4.ip_forward
-    value: "1"
-    state: present
-    reload: yes
-
-- name: Enable and start OpenVPN client service
-  service:
-    name: "{{ openvpn_client_systemd_unit }}"
-    enabled: yes
-    state: started
+- name: Configure OpenVPN client per VPN
+  include_tasks: configure_server.yml
+  loop: "{{ openvpn_config }}"
+  loop_control:
+    loop_var: ovpn_server

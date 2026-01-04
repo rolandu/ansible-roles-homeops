@@ -1,0 +1,13 @@
+{% if ovpn_client_static_ip | default('') | trim | length > 0 -%}
+ifconfig-push {{ ovpn_client_static_ip }} {{ openvpn_netmask }}
+{% endif -%}
+
+{% if ovpn_client_type == 'gateway'
+   and (home_lan_network | default('') | trim | length > 0)
+   and (home_lan_netmask | default('') | trim | length > 0) -%}
+iroute {{ home_lan_network }} {{ home_lan_netmask }}
+{% elif ovpn_client_type == 'roaming'
+   and (home_lan_network | default('') | trim | length > 0)
+   and (home_lan_netmask | default('') | trim | length > 0) -%}
+push "route {{ home_lan_network }} {{ home_lan_netmask }}"
+{% endif %}

@@ -1,0 +1,10 @@
+---
+- name: Restart OpenVPN client service
+  when:
+    - openvpn_client_systemd_unit is defined
+    - openvpn_client_systemd_unit | length > 0
+    - not (openvpn_client_package is defined and openvpn_client_package is changed)
+    - not ansible_check_mode
+  service:
+    name: "{{ openvpn_client_systemd_unit }}"
+    state: restarted

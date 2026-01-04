@@ -1,0 +1,313 @@
+---
+- name: Set server identifiers
+  set_fact:
+    openvpn_vpn_name: "{{ ovpn_server.vpn_name | default(ovpn_server.name) }}"
+    openvpn_server_hostname: "{{ ovpn_server.server_hostname | default(inventory_hostname) }}"
+
+- name: Set server facts
+  set_fact:
+    openvpn_network: "{{ ovpn_server.network }}"
+    openvpn_netmask: "{{ ovpn_server.netmask }}"
+    openvpn_port: "{{ ovpn_server.port | default(openvpn_default_port) }}"
+    openvpn_proto: "{{ ovpn_server.proto | default(openvpn_default_proto) }}"
+    home_lan_network: "{{ ovpn_server.home_lan_network | default('') }}"
+    home_lan_netmask: "{{ ovpn_server.home_lan_netmask | default('') }}"
+    openvpn_full_tunnel: "{{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel) }}"
+    openvpn_remote_host: "{{ ovpn_server.openvpn_remote_host | default(openvpn_server_hostname | default(ansible_host | default(inventory_hostname))) }}"
+    openvpn_client_export_dir: "{{ ovpn_server.openvpn_client_export_dir | default(openvpn_default_client_export_dir) }}"
+    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients"
+    openvpn_server_dir: "{{ ovpn_server.openvpn_server_dir | default(openvpn_default_server_dir) }}"
+    easyrsa_dir: "{{ ovpn_server.easyrsa_dir | default(openvpn_default_easyrsa_dir) }}"
+    ccd_dir: "{{ ovpn_server.ccd_dir | default(openvpn_default_ccd_dir) }}"
+    openvpn_clients: "{{ ovpn_server.clients | default(openvpn_default_clients) }}"
+    openvpn_client_to_client: "{{ ovpn_server.openvpn_client_to_client | default(openvpn_default_client_to_client) }}"
+    openvpn_ca_passphrase: "{{ ovpn_server.openvpn_ca_passphrase }}"
+    openvpn_ca_build_env: "{{ {'EASYRSA_PASSOUT': 'pass:' + openvpn_ca_passphrase} if openvpn_ca_passphrase | default('') | trim | length > 0 else {} }}"
+    openvpn_ca_sign_env: "{{ {'EASYRSA_PASSIN': 'pass:' + openvpn_ca_passphrase} if openvpn_ca_passphrase | default('') | trim | length > 0 else {} }}"
+    openvpn_mgmt_password: "{{ ovpn_server.openvpn_mgmt_password }}"
+    openvpn_mgmt_port: "{{ ovpn_server.openvpn_mgmt_port | default(openvpn_default_mgmt_port) }}"
+    openvpn_mgmt_bind: "{{ ovpn_server.openvpn_mgmt_bind | default(openvpn_default_mgmt_bind) }}"
+
+- name: Set derived paths
+  set_fact:
+    openvpn_mgmt_password_file: "{{ openvpn_server_dir }}/{{ openvpn_vpn_name }}.mgmtpass"
+
+- name: Ensure OpenVPN group exists
+  group:
+    name: openvpn
+    system: yes
+  notify: Restart OpenVPN server instance
+
+- name: Ensure OpenVPN user exists
+  user:
+    name: openvpn
+    group: openvpn
+    system: yes
+    create_home: no
+    shell: /usr/sbin/nologin
+    state: present
+  notify: Restart OpenVPN server instance
+
+- name: Ensure PKI and directories exist
+  block:
+    - name: Install OpenVPN and EasyRSA
+      apt:
+        name:
+          - openvpn
+          - easy-rsa
+        state: present
+        update_cache: yes
+
+    - name: Create EasyRSA directory
+      file:
+        path: "{{ easyrsa_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Copy EasyRSA scripts into place
+      copy:
+        src: "/usr/share/easy-rsa/"
+        dest: "{{ easyrsa_dir }}/"
+        owner: root
+        group: root
+        mode: "0750"
+        remote_src: yes
+
+- name: Initialize PKI if not already present
+  command: ./easyrsa init-pki
+  args:
+    chdir: "{{ easyrsa_dir }}"
+    creates: "{{ easyrsa_dir }}/pki"
+
+- name: Build core server certs/keys
+  block:
+    - name: Build CA
+      command: ./easyrsa --batch build-ca
+      args:
+        chdir: "{{ easyrsa_dir }}"
+        creates: "{{ easyrsa_dir }}/pki/ca.crt"
+      environment: "{{ openvpn_ca_build_env }}"
+
+    - name: Build server certificate
+      command: ./easyrsa --batch build-server-full {{ openvpn_vpn_name }} nopass
+      args:
+        chdir: "{{ easyrsa_dir }}"
+        creates: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_vpn_name }}.crt"
+      environment: "{{ openvpn_ca_sign_env }}"
+
+    - name: Generate DH parameters
+      command: ./easyrsa gen-dh
+      args:
+        chdir: "{{ easyrsa_dir }}"
+        creates: "{{ easyrsa_dir }}/pki/dh.pem"
+
+    - name: Generate TLS auth key
+      command: openvpn --genkey --secret ta.key
+      args:
+        chdir: "{{ easyrsa_dir }}"
+        creates: "{{ easyrsa_dir }}/ta.key"
+  notify: Restart OpenVPN server instance
+
+- name: Ensure OpenVPN server directory exists
+  file:
+    path: "{{ openvpn_server_dir }}"
+    state: directory
+    owner: openvpn
+    group: openvpn
+    mode: "u=rwx,g=rwx,o="
+  notify: Restart OpenVPN server instance
+
+- name: Write management password file
+  when: openvpn_mgmt_password | default('') | trim | length > 0
+  no_log: true
+  copy:
+    dest: "{{ openvpn_mgmt_password_file }}"
+    content: "{{ openvpn_mgmt_password }}\n"
+    owner: openvpn
+    group: openvpn
+    mode: "u=rw,g=rw,o="
+  notify: Restart OpenVPN server instance
+
+- name: Ensure CCD directory exists
+  file:
+    path: "{{ ccd_dir }}"
+    state: directory
+    owner: openvpn
+    group: openvpn
+    mode: "u=rwx,g=rwx,o="
+  notify: Restart OpenVPN server instance
+
+- name: Copy PKI material into server dir
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ openvpn_server_dir }}/{{ item.dest }}"
+    owner: openvpn
+    group: openvpn
+    mode: "u=rw,g=rw,o="
+    remote_src: yes
+  loop:
+    - { src: "{{ easyrsa_dir }}/pki/ca.crt", dest: "ca.crt" }
+    - { src: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_vpn_name }}.crt", dest: "server.crt" }
+    - { src: "{{ easyrsa_dir }}/pki/private/{{ openvpn_vpn_name }}.key", dest: "server.key" }
+    - { src: "{{ easyrsa_dir }}/pki/dh.pem", dest: "dh.pem" }
+    - { src: "{{ easyrsa_dir }}/ta.key", dest: "ta.key" }
+  notify: Restart OpenVPN server instance
+
+- name: Deploy OpenVPN server configuration
+  template:
+    src: "server.conf.j2"
+    dest: "{{ openvpn_server_dir }}/{{ openvpn_vpn_name }}.conf"
+    owner: openvpn
+    group: openvpn
+    mode: "u=rw,g=rw,o="
+  notify: Restart OpenVPN server instance
+
+- name: Ensure VPN forwarding sysctls are enforced
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv4.conf.all.forwarding
+    - net.ipv4.conf.default.forwarding
+  notify: Restart OpenVPN server instance
+
+- name: Set rp_filter to loose mode for VPN routing
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "2"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.conf.all.rp_filter
+    - net.ipv4.conf.default.rp_filter
+  notify: Restart OpenVPN server instance
+
+- name: Verify OpenVPN service is active
+  command: "systemctl is-active openvpn-server@{{ openvpn_vpn_name }}"
+  register: openvpn_service_status
+  changed_when: false
+  failed_when: openvpn_service_status.stdout.strip() not in ['active', 'activating']
+  when: not ansible_check_mode
+  notify: Restart OpenVPN server instance
+
+- name: Wait for OpenVPN TCP port (if applicable)
+  wait_for:
+    port: "{{ openvpn_port }}"
+    state: started
+    timeout: 30
+  when:
+    - not ansible_check_mode
+    - (openvpn_proto | lower) == 'tcp'
+  notify: Restart OpenVPN server instance
+
+- name: Ensure ownership and 0770 on server directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: openvpn
+    group: openvpn
+    mode: "0770"
+  notify: Restart OpenVPN server instance
+  loop:
+    - "{{ openvpn_server_dir }}"
+    - "{{ ccd_dir }}"
+    - "{{ openvpn_client_export_dir }}"
+  when: not ansible_check_mode
+
+- name: Ensure ownership and clear other perms on server assets
+  file:
+    path: "{{ item }}"
+    owner: openvpn
+    group: openvpn
+    mode: "o="
+    recurse: yes
+  notify: Restart OpenVPN server instance
+  loop:
+    - "{{ openvpn_server_dir }}"
+    - "{{ ccd_dir }}"
+    - "{{ openvpn_client_export_dir }}"
+  when: not ansible_check_mode
+
+- name: Enable and start OpenVPN service
+  service:
+    name: "openvpn-server@{{ openvpn_vpn_name }}"
+    enabled: yes
+    state: started
+
+- name: Flush handlers for this VPN instance
+  meta: flush_handlers
+
+# Client setup
+- name: Build client certificates
+  vars:
+    ovpn_client_name: "{{ ovpn_client.name }}"
+  command: ./easyrsa --batch build-client-full {{ ovpn_client_name }} nopass
+  args:
+    chdir: "{{ easyrsa_dir }}"
+    creates: "{{ easyrsa_dir }}/pki/issued/{{ ovpn_client_name }}.crt"
+  environment: "{{ openvpn_ca_sign_env }}"
+  loop: "{{ openvpn_clients }}"
+  loop_control:
+    loop_var: ovpn_client
+
+- name: Render CCD entries per client
+  vars:
+    ovpn_client_name: "{{ ovpn_client.name }}"
+    ovpn_client_type: "{{ ovpn_client.type | default('roaming') }}"
+    ovpn_client_static_ip: "{{ ovpn_client.static_ip | default('') }}"
+  when:
+    - (home_lan_network | default('') | trim | length > 0 and
+       home_lan_netmask | default('') | trim | length > 0 and
+       ovpn_client_type in ['gateway', 'roaming'])
+      or (ovpn_client_static_ip | default('') | trim | length > 0)
+  template:
+    src: "ccd-client.j2"
+    dest: "{{ ccd_dir }}/{{ ovpn_client_name }}"
+    owner: openvpn
+    group: openvpn
+    mode: "u=rw,g=rw,o="
+  loop: "{{ openvpn_clients }}"
+  loop_control:
+    loop_var: ovpn_client
+  notify: Restart OpenVPN server instance
+
+- name: Ensure client export directory exists
+  file:
+    path: "{{ openvpn_client_export_dir }}"
+    state: directory
+    owner: openvpn
+    group: openvpn
+    mode: "u=rwx,g=rwx,o="
+  notify: Restart OpenVPN server instance
+
+- name: Ensure controller export directory exists
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ openvpn_client_local_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Enable NAT for VPN clients
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: eth0
+    source: "{{ openvpn_network }}/{{ openvpn_netmask }}"
+    jump: MASQUERADE
+    comment: "NAT for VPN clients"
+
+- name: Export inline client configs locally
+  include_tasks: export_client.yml
+  loop: "{{ openvpn_clients }}"
+  loop_control:
+    loop_var: ovpn_client
+  vars:
+    client_name: "{{ ovpn_client.name }}"
+    client_type: "{{ ovpn_client.type | default('roaming') }}"
+    client_local_dir: "{{ openvpn_client_local_dir }}"
+    client_config_basename: "{{ openvpn_vpn_name }}_{{ client_name }}"
+    client_local_config_file: "{{ client_local_dir }}/{{ client_config_basename }}.ovpn"

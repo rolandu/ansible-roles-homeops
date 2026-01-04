@@ -8,6 +8,12 @@ nobind
 persist-key
 persist-tun
 
+{% if ovpn_client_type in ['gateway', 'local']
+      and (home_lan_network | default('') | trim | length > 0)
+      and (home_lan_netmask | default('') | trim | length > 0) %}
+pull-filter ignore "route {{ home_lan_network }} {{ home_lan_netmask }}"
+{% endif %}
+
 remote-cert-tls server
 key-direction 1
 
@@ -28,4 +34,3 @@ verb 3
 <tls-auth>
 {{ ovpn_ta_content }}
 </tls-auth>
-
