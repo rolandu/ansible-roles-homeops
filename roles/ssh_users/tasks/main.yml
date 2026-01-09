@@ -55,3 +55,16 @@
     - item.authorized_keys | length > 0
   loop_control:
     label: "{{ item.name }}"
+
+# Include Ops User Setup tasks
+- name: "Set up user for passwordless sudo operations (if defined)"
+  ansible.builtin.include_tasks: ops_user_setup.yml
+  when: 
+    - ops_user is defined
+    - ops_user is not none
+    - ops_user | string | length > 0
+
+# Include SSH hardening tasks
+- name: "SSH hardening tasks"
+  ansible.builtin.include_tasks: hardening.yml
+

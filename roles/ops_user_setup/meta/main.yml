@@ -1,7 +1,0 @@
-galaxy_info:
-  author: rolandu
-  description: Manage the ops user and basic SSH hardening (keys, sudo, sshd settings).
-  license: MIT
-  min_ansible_version: 2.13
-
-dependencies: []

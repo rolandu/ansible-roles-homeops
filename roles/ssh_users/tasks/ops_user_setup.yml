@@ -1,0 +1,31 @@
+---
+# Ops User Setup
+
+- name: Check user {{ ops_user }} exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ops_user }}"
+  register: ops_exists
+  changed_when: false
+
+- name: "Report if {{ ops_user }} does not exist"
+  ansible.builtin.fail:
+    msg: "Ops user {{ ops_user }} does not exist. Please create it before running this task."
+  when: not ops_exists
+
+- name: "Ensure {{ ops_user }} is in sudo group"
+  ansible.builtin.user:
+    name: "{{ ops_user }}"
+    groups: sudo
+    append: yes
+
+- name: "Grant passwordless sudo to {{ ops_user }}"
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ ops_user }}"
+    content: "{{ ops_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+

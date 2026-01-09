@@ -1,6 +1,8 @@
 # ssh_users
 
-Manage local SSH users and authorized keys.
+- Manage local SSH users and authorized keys.
+- Set up an "ops" user to be used by ansible with passwordless sudo.
+- SSH hardening (including restart of SSH server and confirmation of connection afterwards)
 
 ## Role Variables
 
@@ -43,5 +45,9 @@ ssh_users:
     # home omitted → /home/backup
     # shell omitted → /bin/bash
     # authorized_keys → none
+
+# define an ops-user that will be used by ansible (passwordless sudo)
+# the user must be contained in the list above!
+ops_user: ops
 ```
 

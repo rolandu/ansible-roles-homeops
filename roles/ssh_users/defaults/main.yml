@@ -1,3 +1,18 @@
 # roles/ssh_users/defaults/main.yml
 
+# array of users to create/manage
 ssh_users: []
+
+# name of "ops" user for use by ansible
+# - must be present in the users array
+# - user will be set up with passwordless sudo
+# - ignored if set to null.
+ops_user: null
+
+# Hardening options:
+# Path to sshd_config (Debian/Ubuntu default)
+sshd_config_path: /etc/ssh/sshd_config
+# If true, we’ll disable password auth for SSH
+ssh_disable_password_auth: true
+# If true, we’ll disable root login
+ssh_disable_root_login: true

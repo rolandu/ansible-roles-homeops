@@ -1,47 +1,6 @@
-# roles/secure_ssh/tasks/main.yml
-
-- name: "Ensure ops user exists (optional, safe if created by bootstrap)"
-  ansible.builtin.user:
-    name: "{{ ops_user }}"
-    state: present
-    home: "{{ ops_user_home }}"
-    shell: "{{ ops_user_shell }}"
-    create_home: true
-  # You can remove this if you fully trust the bootstrap script
-
-- name: "Ensure ops user is in sudo group"
-  ansible.builtin.user:
-    name: "{{ ops_user }}"
-    groups: sudo
-    append: yes
-
-- name: "Grant passwordless sudo to {{ ops_user }}"
-  ansible.builtin.copy:
-    dest: "/etc/sudoers.d/90-{{ ops_user }}"
-    content: "{{ ops_user }} ALL=(ALL) NOPASSWD:ALL\n"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-
-- name: "Ensure .ssh directory exists for {{ ops_user }}"
-  ansible.builtin.file:
-    path: "{{ ops_user_home }}/.ssh"
-    state: directory
-    owner: "{{ ops_user }}"
-    group: "{{ ops_user }}"
-    mode: "0700"
-
-- name: "Install authorized_keys for {{ ops_user }}"
-  ansible.posix.authorized_key:
-    user: "{{ ops_user }}"
-    key: "{{ item }}"
-    state: present
-    manage_dir: no   # directory already managed above
-  loop: "{{ ops_authorized_keys }}"
-  when: ops_authorized_keys | length > 0
-
+---
 # SSH hardening
+
 - name: "Ensure sshd_config exists"
   ansible.builtin.stat:
     path: "{{ sshd_config_path }}"
