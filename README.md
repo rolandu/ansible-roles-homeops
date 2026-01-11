@@ -5,7 +5,11 @@
 
 Ansible roles for home/family infrastructure (servers, laptops, workstations, etc.).
 
-## Conventions used in this collection:
+## What is in it?
+
+- [certbot_hetzner](roles/certbot_hetzner/)
+
+## Conventions used in this collection
 
 Local:
 - `artifacts`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/{{ host }}`
