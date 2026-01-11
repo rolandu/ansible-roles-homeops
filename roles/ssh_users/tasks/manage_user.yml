@@ -6,7 +6,7 @@
   changed_when: false
   failed_when: false
 
-- name: "Ensure {{ ssh_user.name }} exists and add extra groups"
+- name: "Manage user state and groups for {{ ssh_user.name }}"
   ansible.builtin.user:
     name: "{{ ssh_user.name }}"
     state: "{{ ssh_user.state | default('present') }}"
