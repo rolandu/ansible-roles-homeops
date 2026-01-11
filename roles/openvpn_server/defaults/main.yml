@@ -11,5 +11,8 @@ openvpn_default_client_to_client: false
 openvpn_default_mgmt_port: 7505
 openvpn_default_mgmt_bind: "127.0.0.1"
 
+# Local controller path for exported artifacts
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+
 # Global path base for exported configs on controller (shared with client role)
-openvpn_client_local_dir_base: "{{ inventory_dir }}/artifacts"
+openvpn_client_local_dir_base: "{{ artifacts_dir }}"

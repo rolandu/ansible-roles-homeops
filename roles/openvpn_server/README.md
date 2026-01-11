@@ -27,7 +27,8 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`), `openvpn_default_server_dir` (default: `/etc/openvpn/server`), `openvpn_default_easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `openvpn_default_ccd_dir` (default: `/etc/openvpn/ccd`).
   - `openvpn_default_clients` (default: `[]`) if no clients list is set.
   - `openvpn_default_mgmt_port` (default: `7505`), `openvpn_default_mgmt_bind` (default: `127.0.0.1`).
-- `openvpn_client_local_dir_base` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/openvpn-clients/<vpn_name>_<client>.ovpn`.
+- `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
+- `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/openvpn-clients/<vpn_name>_<client>.ovpn`.
 
 Protocol note: we default to `udp4` to avoid IPv6 blackholes and keep connects quick; switch to `udp6`/`udp`/`tcp*` only if you need IPv6 or TCP traversal.
 

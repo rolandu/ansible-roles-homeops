@@ -24,7 +24,8 @@
 - `ssh_users_generate_keys` (bool, default `true`): generate SSH keys for each managed user.
 - `ssh_users_key_type` (string, default `ed25519`): SSH key type for generated keys.
 - `ssh_users_key_filename` (string, default `id_ed25519`): SSH key filename for generated keys.
-- `ssh_users_key_local_dir` (string, default `{{ inventory_dir }}/artifacts/ssh_keys`): local controller path for exported public keys. Files are written as `<user>@<inventory_hostname>.pub`.
+- `artifacts_dir` (string, default `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
+- `ssh_users_key_local_dir` (string, default `{{ artifacts_dir }}/ssh_keys`): local controller path for exported public keys. Files are written as `<user>@<inventory_hostname>.pub`.
 
 Defaults are defined in `roles/ssh_users/defaults/main.yml`.
 
@@ -50,7 +51,7 @@ ssh_users:
     authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... roland@laptop"
     authorized_key_files:
-      - "artifacts/ssh_keys/ops@bastion.pub"
+      - "ops@bastion.pub"
     generate_ssh_key: true
     ssh_key_type: ed25519
     ssh_key_filename: id_ed25519

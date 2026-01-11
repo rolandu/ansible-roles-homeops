@@ -9,7 +9,8 @@ ssh_users: []
 ssh_users_generate_keys: true
 ssh_users_key_type: ed25519
 ssh_users_key_filename: id_ed25519
-ssh_users_key_local_dir: "{{ inventory_dir }}/artifacts/ssh_keys"
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+ssh_users_key_local_dir: "{{ artifacts_dir }}/ssh_keys"
 
 # name of "ops" user for use by ansible
 # - must be present in the users array

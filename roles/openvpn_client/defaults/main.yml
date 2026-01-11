@@ -5,5 +5,8 @@ openvpn_client_name: "{{ inventory_hostname }}"
 # VPN definitions and their clients (shared with server role)
 openvpn_config: []
 
+# Local controller path for exported artifacts
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+
 # Global path base for exported configs on the controller
-openvpn_client_local_dir_base: "{{ inventory_dir }}/artifacts"
+openvpn_client_local_dir_base: "{{ artifacts_dir }}"

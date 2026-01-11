@@ -14,10 +14,18 @@ Ansible roles for home/family infrastructure (servers, laptops, workstations, et
 - [update_debian_ubuntu](roles/update_debian_ubuntu/): updating of the system
 
 
-## Conventions used in this collection
+## Global config
+
+Configurations that are used across multiple roles:
+
+- `artifacts_dir`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/` on the local machine
+- `docker_stack_base_dir`: where docker-compose files will live (optional, default: `/opt/docker`)
+- `docker_data_base_dir`: where docker-data will live - this should be included in backup (optioan, default: `/srv/docker-data`)
+
+## Conventions
 
 Local:
-- `artifacts`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/{{ host }}`
+- files downloaded from hosts will go into `artifacts_dir`
 
 Remote:
 - Software: all custom software such as scripts, checkouts, docker-compose should live inside of `/opt/<app>` on the host.

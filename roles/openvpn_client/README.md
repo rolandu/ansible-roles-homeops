@@ -6,7 +6,8 @@ Install and configure an OpenVPN client from exported inline `.ovpn` profiles, h
 
 - `openvpn_config` (list, required): same structure used by the server role. Each VPN entry’s `clients` list drives which hosts are managed here.
 - `openvpn_client_name` (string, default: `inventory_hostname`): client key to match under each server definition.
-- `openvpn_client_local_dir_base` (string, default: `{{ inventory_dir }}/artifacts`): where exported `<vpn_name>_<client>.ovpn` files live on the controller.
+- `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
+- `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}`): where exported `<vpn_name>_<client>.ovpn` files live on the controller.
 
 ## Behavior
 
