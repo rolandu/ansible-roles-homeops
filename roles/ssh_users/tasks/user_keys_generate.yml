@@ -1,0 +1,76 @@
+# roles/ssh_users/tasks/user_keys_generate.yml
+
+- name: "Ensure .ssh directory exists for {{ ssh_user.name }}"
+  ansible.builtin.file:
+    path: "{{ ssh_user_home }}/.ssh"
+    state: directory
+    owner: "{{ ssh_user.name }}"
+    group: "{{ ssh_user.name }}"
+    mode: "0700"
+  when: ssh_user_generate_key | bool
+
+- name: "Generate SSH key for {{ ssh_user.name }}"
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -t
+      - "{{ ssh_user_key_type }}"
+      - -f
+      - "{{ ssh_user_key_path }}"
+      - -N
+      - ""
+      - -C
+      - "{{ ssh_user_key_comment }}"
+  args:
+    creates: "{{ ssh_user_key_path }}"
+  become: true
+  when: ssh_user_generate_key | bool
+
+- name: "Check SSH private key for {{ ssh_user.name }}"
+  ansible.builtin.stat:
+    path: "{{ ssh_user_key_path }}"
+  register: ssh_user_key_stat
+  when: ssh_user_generate_key | bool
+
+- name: "Check SSH public key for {{ ssh_user.name }}"
+  ansible.builtin.stat:
+    path: "{{ ssh_user_key_path }}.pub"
+  register: ssh_user_pub_key_stat
+  when: ssh_user_generate_key | bool
+
+- name: "Ensure private key ownership and permissions for {{ ssh_user.name }}"
+  ansible.builtin.file:
+    path: "{{ ssh_user_key_path }}"
+    owner: "{{ ssh_user.name }}"
+    group: "{{ ssh_user.name }}"
+    mode: "0600"
+  when:
+    - ssh_user_generate_key | bool
+    - ssh_user_key_stat.stat.exists | default(false)
+
+- name: "Ensure public key ownership and permissions for {{ ssh_user.name }}"
+  ansible.builtin.file:
+    path: "{{ ssh_user_key_path }}.pub"
+    owner: "{{ ssh_user.name }}"
+    group: "{{ ssh_user.name }}"
+    mode: "0644"
+  when:
+    - ssh_user_generate_key | bool
+    - ssh_user_pub_key_stat.stat.exists | default(false)
+
+- name: "Ensure local SSH key artifact directory exists"
+  ansible.builtin.file:
+    path: "{{ ssh_user_key_local_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  when: ssh_user_generate_key | bool
+
+- name: "Export public key for {{ ssh_user.name }}"
+  ansible.builtin.fetch:
+    src: "{{ ssh_user_key_path }}.pub"
+    dest: "{{ ssh_user_key_local_dir }}/{{ ssh_user.name }}@{{ inventory_hostname }}.pub"
+    flat: true
+  become: true
+  when: ssh_user_generate_key | bool

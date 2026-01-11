@@ -20,41 +20,34 @@
     loop_var: ssh_user
     label: "{{ ssh_user.name }}"
 
-# Ensure .ssh directory
-- name: "Ensure .ssh directory exists"
-  ansible.builtin.file:
-    path: "{{ user_home }}/.ssh"
-    state: directory
-    owner: "{{ item.name }}"
-    group: "{{ item.name }}"
-    mode: "0700"
-  vars:
-    user_home: "{{ item.home | default('/home/' + item.name) }}"
+# Generate SSH keys and export public keys to controller
+- name: "Generate SSH user keys"
+  ansible.builtin.include_tasks: user_keys_generate.yml
   loop: "{{ ssh_users }}"
-  when:
-    - item.authorized_keys is defined
-    - item.authorized_keys | length > 0
   loop_control:
-    label: "{{ item.name }}"
+    loop_var: ssh_user
+    label: "{{ ssh_user.name }}"
+  vars:
+    ssh_user_home: "{{ ssh_user.home | default('/home/' + ssh_user.name) }}"
+    ssh_user_generate_key: "{{ ssh_user.generate_ssh_key | default(ssh_users_generate_keys) }}"
+    ssh_user_key_filename: "{{ ssh_user.ssh_key_filename | default(ssh_users_key_filename) }}"
+    ssh_user_key_type: "{{ ssh_user.ssh_key_type | default(ssh_users_key_type) }}"
+    ssh_user_key_comment: "{{ ssh_user.ssh_key_comment | default(ssh_user.name + '@' + inventory_hostname) }}"
+    ssh_user_key_path: "{{ ssh_user_home }}/.ssh/{{ ssh_user_key_filename }}"
+    ssh_user_key_local_dir: "{{ ssh_users_key_local_dir }}"
+  when: ssh_user.state | default('present') != 'absent'
 
-# Install keys
-# This method is better than the built-in ansible.posix.authorized_key because it also
-# handles removing keys that are no longer wanted.
-- name: "Write authorized_keys"
-  ansible.builtin.copy:
-    dest: "{{ user_home }}/.ssh/authorized_keys"
-    owner: "{{ item.name }}"
-    group: "{{ item.name }}"
-    mode: "0600"
-    content: "{{ (item.authorized_keys | default([])) | join('\n') + '\n' }}"
-  vars:
-    user_home: "{{ item.home | default('/home/' + item.name) }}"
+# Install authorized_keys after all keys are generated/exported
+- name: "Install SSH user authorized_keys"
+  ansible.builtin.include_tasks: user_keys_install.yml
   loop: "{{ ssh_users }}"
-  when:
-    - item.authorized_keys is defined
-    - item.authorized_keys | length > 0
   loop_control:
-    label: "{{ item.name }}"
+    loop_var: ssh_user
+    label: "{{ ssh_user.name }}"
+  vars:
+    ssh_user_home: "{{ ssh_user.home | default('/home/' + ssh_user.name) }}"
+    ssh_user_key_local_dir: "{{ ssh_users_key_local_dir }}"
+  when: ssh_user.state | default('present') != 'absent'
 
 # Include Ops User Setup tasks
 - name: "Set up user for passwordless sudo operations (if defined)"
@@ -67,4 +60,3 @@
 # Include SSH hardening tasks
 - name: "SSH hardening tasks"
   ansible.builtin.include_tasks: hardening.yml
-

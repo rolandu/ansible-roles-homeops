@@ -24,6 +24,7 @@
 - name: "Expire password so {{ ssh_user.name }} must reset on first login"
   ansible.builtin.command: "chage -d 0 {{ ssh_user.name }}"
   when:
+    - ssh_user.state | default('present') != 'absent'
     - ssh_user.initial_password_hash is defined
     - ssh_user.initial_password_hash | length > 0
     - ssh_user_probe.rc != 0     # only when the account was just created

@@ -3,6 +3,14 @@
 # array of users to create/manage
 ssh_users: []
 
+# SSH key generation defaults
+# - keys are generated per user at ~/.ssh/<ssh_users_key_filename>
+# - public keys are exported to the controller under ssh_users_key_local_dir
+ssh_users_generate_keys: true
+ssh_users_key_type: ed25519
+ssh_users_key_filename: id_ed25519
+ssh_users_key_local_dir: "{{ inventory_dir }}/artifacts/ssh_keys"
+
 # name of "ops" user for use by ansible
 # - must be present in the users array
 # - user will be set up with passwordless sudo
