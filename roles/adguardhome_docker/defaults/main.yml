@@ -1,0 +1,57 @@
+app_root_dir: "/opt"
+data_root_dir: "/srv"
+
+docker_app_base_dir: "{{ app_root_dir }}/docker"
+docker_data_base_dir: "{{ data_root_dir }}/docker-data"
+
+adguard_stack_dir: "{{ docker_app_base_dir }}/adguardhome"
+adguard_data_dir: "{{ docker_data_base_dir }}/adguardhome"
+
+adguard_conf_dir: "{{ adguard_stack_dir }}/conf"
+adguard_work_dir: "{{ adguard_data_dir }}/work"
+
+adguard_web_bind: "127.0.0.1"
+adguard_web_port: 3000
+
+adguard_dns_bind: "0.0.0.0"
+adguard_dns_port: 53
+adguard_dnssec_enabled: true
+
+adguard_image: "adguard/adguardhome"
+adguard_image_tag: "latest"
+
+# Upstream DoT (privacy/security-oriented)
+adguard_upstreams:
+  - "tls://dns.adguard-dns.com"  # privacy-focused, filters ads, trackers, malware
+  - "tls://base.dns.mullvad.net"  # privacy-focused, EU-based, filters ads, trackers, malware
+  - "tls://dns.quad9.net"  # privacy-focused, filters malware
+
+adguard_fallback_dns:
+  - "tls://anycast.uncensoreddns.org"
+  - "tls://dns1.restena.lu"
+
+adguard_bootstrap_dns:
+  - "9.9.9.9"  # Quad9
+  - "1.1.1.1"  # Cloudflare
+
+adguard_rewrites: []
+
+adguard_anonymize_client_ip: true
+
+adguard_blocklists:
+  - name: "AdGuard DNS filter"
+    url: "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
+  - name: "HaGeZi Normal Blocklist"
+    url: "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/multi.txt"
+  - name: "HaGeZi Threat Intelligence Feeds"
+    url: "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.txt"
+
+adguard_user_rules: []
+
+adguard_admin_user: "admin"
+# store bcrypt hash in Vault (best) OR do deterministic bcrypt like earlier
+adguard_admin_password_bcrypt: ""
+
+adguard_run_test: true
+adguard_test_domain: "example.com"
+adguard_teardown: false

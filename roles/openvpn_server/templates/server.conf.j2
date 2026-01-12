@@ -31,6 +31,14 @@ push "redirect-gateway def1 bypass-dhcp"
 route {{ home_lan_network }} {{ home_lan_netmask }}
 {% endif %}
 
+{% if openvpn_dns_servers is string %}
+push "dhcp-option DNS {{ openvpn_dns_servers }}"
+{% else %}
+{% for dns in openvpn_dns_servers | flatten %}
+push "dhcp-option DNS {{ dns }}"
+{% endfor %}
+{% endif %}
+
 keepalive 10 120
 persist-key
 persist-tun

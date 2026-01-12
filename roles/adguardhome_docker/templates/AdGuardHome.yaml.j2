@@ -1,0 +1,60 @@
+schema_version: 32
+
+bind_host: {{ adguard_web_bind }}
+bind_port: {{ adguard_web_port }}
+
+users:
+  - name: {{ adguard_admin_user }}
+    password: "{{ adguard_admin_password_bcrypt }}"
+
+dns:
+  bind_hosts:
+{% if adguard_dns_bind is string %}
+    - {{ adguard_dns_bind }}
+{% else %}
+{% for b in adguard_dns_bind | flatten %}
+    - {{ b }}
+{% endfor %}
+{% endif %}
+  port: {{ adguard_dns_port }}
+
+  protection_enabled: true
+  enable_dnssec: {{ adguard_dnssec_enabled | bool }}
+  anonymize_client_ip: {{ adguard_anonymize_client_ip | bool }}
+
+  upstream_dns:
+{% for u in adguard_upstreams | flatten %}
+    - {{ u }}
+{% endfor %}
+
+  fallback_dns:
+{% for f in adguard_fallback_dns | flatten %}
+    - {{ f }}
+{% endfor %}
+
+  bootstrap_dns:
+{% for b in adguard_bootstrap_dns | flatten %}
+    - {{ b }}
+{% endfor %}
+
+filtering:
+  filtering_enabled: true
+  rewrites_enabled: true
+  rewrites:
+{% for r in adguard_rewrites %}
+    - domain: {{ r.domain }}
+      answer: {{ r.answer }}
+      enabled: true
+{% endfor %}
+
+filters:
+{% for f in adguard_blocklists %}
+  - enabled: true
+    name: {{ f.name }}
+    url: {{ f.url }}
+{% endfor %}
+
+user_rules:
+{% for rule in adguard_user_rules %}
+  - {{ rule }}
+{% endfor %}

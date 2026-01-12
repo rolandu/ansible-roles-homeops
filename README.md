@@ -18,9 +18,11 @@ Ansible roles for home/family infrastructure (servers, laptops, workstations, et
 
 Configurations that are used across multiple roles:
 
-- `artifacts_dir`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/` on the local machine
-- `docker_stack_base_dir`: where docker-compose files will live (optional, default: `/opt/docker`)
-- `docker_data_base_dir`: where docker-data will live - this should be included in backup (optioan, default: `/srv/docker-data`)
+- `artifacts_dir`: stuff downloaded from hosts goes into `"{{ inventory_dir }}/artifacts/"` on the local machine
+- `app_root_dir`: base path for app installs (default: `/opt`)
+- `data_root_dir`: base path for service data (default: `/srv`)
+- `docker_app_base_dir`: where docker-compose files will live (default: `{{ app_root_dir }}/docker`)
+- `docker_data_base_dir`: where docker data will live - include this in backups (default: `{{ data_root_dir }}/docker-data`)
 
 ## Conventions
 
@@ -28,5 +30,5 @@ Local:
 - files downloaded from hosts will go into `artifacts_dir`
 
 Remote:
-- Software: all custom software such as scripts, checkouts, docker-compose should live inside of `/opt/<app>` on the host.
-- Data: all data of services that is to be persisted should live in `/srv/<app>/` on the host.
+- Software: all custom software such as scripts, checkouts, docker-compose should live inside of `{{ app_root_dir }}/<app>` on the host.
+- Data: all data of services that is to be persisted should live in `{{ data_root_dir }}/<app>/` on the host.

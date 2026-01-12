@@ -1,0 +1,102 @@
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Teardown AdGuard Home stack
+  when: adguard_teardown | bool
+  block:
+    - name: Stop AdGuard Home containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ adguard_stack_dir }}"
+        state: stopped
+        build: never
+
+    - name: Re-enable systemd-resolved stub listener if present
+      ansible.builtin.ini_file:
+        path: /etc/systemd/resolved.conf
+        section: Resolve
+        option: DNSStubListener
+        value: "yes"
+        create: true
+      register: adguard_resolved_conf_restore
+      when: ansible_facts.services['systemd-resolved.service'] is defined
+
+    - name: Restart systemd-resolved if stub listener changed
+      ansible.builtin.service:
+        name: systemd-resolved
+        state: restarted
+      when:
+        - ansible_facts.services['systemd-resolved.service'] is defined
+        - adguard_resolved_conf_restore is changed
+
+- name: Configure AdGuard Home stack
+  when: not adguard_teardown | bool
+  block:
+    - name: Require admin password bcrypt
+      ansible.builtin.assert:
+        that:
+          - adguard_admin_password_bcrypt is defined
+          - adguard_admin_password_bcrypt | trim | length > 0
+        fail_msg: "Set adguard_admin_password_bcrypt to a non-empty bcrypt hash."
+
+    - name: Disable systemd-resolved stub listener if present
+      ansible.builtin.ini_file:
+        path: /etc/systemd/resolved.conf
+        section: Resolve
+        option: DNSStubListener
+        value: "no"
+        create: false
+      register: adguard_resolved_conf
+      when: ansible_facts.services['systemd-resolved.service'] is defined
+
+    - name: Restart systemd-resolved if stub listener changed
+      ansible.builtin.service:
+        name: systemd-resolved
+        state: restarted
+      when:
+        - ansible_facts.services['systemd-resolved.service'] is defined
+        - adguard_resolved_conf is changed
+
+    - name: Ensure stack directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ adguard_stack_dir }}"
+        - "{{ adguard_conf_dir }}"
+        - "{{ adguard_work_dir }}"
+
+    - name: Render AdGuardHome.yaml
+      ansible.builtin.template:
+        src: "AdGuardHome.yaml.j2"
+        dest: "{{ adguard_conf_dir }}/AdGuardHome.yaml"
+        mode: "0640"
+      notify: Restart adguardhome
+
+    - name: Render compose.yml
+      ansible.builtin.template:
+        src: "compose.yml.j2"
+        dest: "{{ adguard_stack_dir }}/compose.yml"
+        mode: "0644"
+      notify: Restart adguardhome
+
+    - name: Bring up AdGuard Home stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ adguard_stack_dir }}"
+        state: present
+        build: never
+
+    - name: Flush handlers before DNS test
+      ansible.builtin.meta: flush_handlers
+      when: adguard_run_test
+
+    - name: Test DNS on localhost
+      ansible.builtin.command: >
+        dig @127.0.0.1 -p {{ adguard_dns_port }} {{ adguard_test_domain }}
+        +time=2 +tries=1 +short
+      register: adguard_dns_test
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: adguard_dns_test.rc == 0 and (adguard_dns_test.stdout | trim | length) > 0
+      when: adguard_run_test

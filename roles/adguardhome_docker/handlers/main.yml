@@ -1,0 +1,6 @@
+- name: Restart adguardhome
+  community.docker.docker_compose_v2:
+    project_src: "{{ adguard_stack_dir }}"
+    state: present
+    recreate: always
+    build: never

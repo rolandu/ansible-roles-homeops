@@ -19,6 +19,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_mgmt_password` (required): password used to enable the management socket; the role writes a password file and adds a `management <bind> <port> <file>` line.
   - `openvpn_mgmt_port`, `openvpn_mgmt_bind` (optional): address/port for the management socket (only used when `openvpn_mgmt_password` is set; defaults: `127.0.0.1` / `7505`).
   - `openvpn_client_export_dir` (default: `/root/openvpn-clients`): server-side export path for generated client bundles.
+  - `openvpn_dns_servers` (list, optional): DNS servers to push to clients (adds `dhcp-option DNS` lines).
   - `openvpn_server_dir` (default: `/etc/openvpn/server`; owned by `openvpn:openvpn`, 0750), `easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `ccd_dir` (default: `/etc/openvpn/ccd`; `openvpn:openvpn`, `0750`, CCD files `0640`).
   - `openvpn_client_to_client` (bool, default: `false`): enable `client-to-client` to allow traffic between VPN clients inside OpenVPN.
   - `clients` (list): client definitions. Fields: `name` (required), `type` (`gateway`|`roaming`|`local`, default `roaming`), `static_ip` (optional, for CCD if set), `managed` (bool, default `true`; set `false` to export only and skip client role).
@@ -27,6 +28,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`), `openvpn_default_server_dir` (default: `/etc/openvpn/server`), `openvpn_default_easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `openvpn_default_ccd_dir` (default: `/etc/openvpn/ccd`).
   - `openvpn_default_clients` (default: `[]`) if no clients list is set.
   - `openvpn_default_mgmt_port` (default: `7505`), `openvpn_default_mgmt_bind` (default: `127.0.0.1`).
+  - `openvpn_default_dns_servers` (default: `[]`): DNS servers pushed to clients when `openvpn_dns_servers` is not set.
 - `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/openvpn-clients/<vpn_name>_<client>.ovpn`.
 
