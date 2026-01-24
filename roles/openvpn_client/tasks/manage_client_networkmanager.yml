@@ -1,0 +1,133 @@
+---
+# first verify that this system is in fact using NetworkManager
+- name: Gather service facts
+  service_facts:
+
+- name: Assert NetworkManager is running
+  assert:
+    that:
+      - "'NetworkManager.service' in ansible_facts.services"
+      - ansible_facts.services['NetworkManager.service'].state == 'running'
+    fail_msg: >-
+      NetworkManager is installed but not running; enable/start NetworkManager
+      or remove it to use the openvpn-client path.
+
+- name: Check NetworkManager runtime state
+  command: nmcli -t -f RUNNING general
+  register: openvpn_client_nm_running
+  changed_when: false
+
+- name: Assert NetworkManager is managing networking
+  assert:
+    that:
+      - openvpn_client_nm_running.stdout | trim | lower == 'running'
+    fail_msg: >-
+      NetworkManager is not running according to nmcli; ensure it is managing
+      networking before using the NetworkManager path.
+
+# Remove any existing OpenVPN packages to avoid conflicts
+- name: Remove OpenVPN packages if present
+  apt:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - openvpn
+    - openvpn-client
+  when: item in ansible_facts.packages
+
+- name: Install NetworkManager OpenVPN plugin
+  apt:
+    name: network-manager-openvpn
+    state: present
+    update_cache: yes
+  register: openvpn_client_nm_plugin
+
+- name: Reload NetworkManager after plugin install
+  when: openvpn_client_nm_plugin is changed
+  command: nmcli general reload
+  changed_when: false
+
+# if the client is configured to use gateway sysctls, enforce them now
+- name: Enforce gateway sysctls when required
+  include_tasks: manage_client_gateway.yml
+
+# the dispatcher script ensures that the OpenVPN connection is established as soon as a network connection is available
+- name: Ensure NetworkManager dispatcher directory exists
+  when: openvpn_client_nm_autoconnect_dispatcher | bool
+  file:
+    path: /etc/NetworkManager/dispatcher.d
+    state: directory
+    mode: '0755'
+
+- name: Install NetworkManager dispatcher autoconnect script
+  when: openvpn_client_nm_autoconnect_dispatcher | bool
+  template:
+    src: nm-openvpn-autoconnect.sh.j2
+    dest: /etc/NetworkManager/dispatcher.d/90-openvpn-autoconnect
+    mode: '0755'
+
+- name: Remove NetworkManager dispatcher autoconnect script when disabled
+  when: not openvpn_client_nm_autoconnect_dispatcher | bool
+  file:
+    path: /etc/NetworkManager/dispatcher.d/90-openvpn-autoconnect
+    state: absent
+
+# manage the OpenVPN connection in NetworkManager
+- name: List existing NetworkManager connections
+  command: nmcli -t -f NAME connection show
+  register: openvpn_client_nm_connections
+  changed_when: false
+
+- name: Mark existing NetworkManager connection
+  set_fact:
+    openvpn_client_nm_connection_exists: >-
+      {{ openvpn_client_connection_name in openvpn_client_nm_connections.stdout_lines }}
+
+- name: Drop existing connection when config changed
+  when:
+    - openvpn_client_config_copy.changed
+    - openvpn_client_nm_connection_exists | bool
+  command: nmcli connection delete "{{ openvpn_client_connection_name }}"
+  register: openvpn_client_nm_delete
+  changed_when: openvpn_client_nm_delete.rc == 0
+
+- name: Import OpenVPN connection into NetworkManager
+  when: openvpn_client_config_copy.changed or (not openvpn_client_nm_connection_exists | bool)
+  command: >-
+    nmcli connection import type openvpn
+    file "{{ openvpn_client_conf_dir }}/{{ openvpn_client_connection_name }}.conf"
+  register: openvpn_client_nm_import
+  changed_when: openvpn_client_nm_import.rc == 0
+
+# make sure networkmanager keeps the connection alive
+- name: Ensure NetworkManager base connection settings
+  when: openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
+  command: >-
+    nmcli connection modify "{{ openvpn_client_connection_name }}"
+    vpn.timeout 30
+    connection.autoconnect yes
+    connection.autoconnect-retries 0
+    +vpn.data "ping=10"
+    +vpn.data "ping-restart=60"
+  changed_when: false
+
+- name: Prefer VPN DNS in NetworkManager connection
+  when:
+    - openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+  command: >-
+    nmcli connection modify "{{ openvpn_client_connection_name }}"
+    ipv4.ignore-auto-dns no
+    ipv4.dns-priority -50
+  changed_when: false
+
+- name: List active NetworkManager connections
+  command: nmcli -t -f NAME connection show --active
+  register: openvpn_client_nm_active
+  changed_when: false
+
+- name: Bring up NetworkManager connection
+  when: openvpn_client_connection_name not in openvpn_client_nm_active.stdout_lines
+  command: nmcli connection up "{{ openvpn_client_connection_name }}"
+  register: openvpn_client_nm_up
+  changed_when: openvpn_client_nm_up.rc == 0

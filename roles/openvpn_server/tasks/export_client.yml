@@ -1,25 +1,25 @@
 ---
-- name: Slurp CA certificate
+- name: Slurp CA certificate ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
     src: "{{ easyrsa_dir }}/pki/ca.crt"
   register: ovpn_ca
 
-- name: Slurp TLS auth key
+- name: Slurp TLS auth key ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
     src: "{{ easyrsa_dir }}/ta.key"
   register: ovpn_ta
 
-- name: Slurp client certificate
+- name: Slurp client certificate ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
     src: "{{ easyrsa_dir }}/pki/issued/{{ client_name }}.crt"
   register: ovpn_crt
 
-- name: Slurp client private key
+- name: Slurp client private key ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
     src: "{{ easyrsa_dir }}/pki/private/{{ client_name }}.key"
   register: ovpn_key
 
-- name: Write inline client config locally
+- name: Write inline client config locally ({{ openvpn_vpn_name }} - {{ client_name }})
   delegate_to: localhost
   become: false
   template:
@@ -29,6 +29,7 @@
   vars:
     ovpn_client_name: "{{ client_name }}"
     ovpn_client_type: "{{ client_type | default('roaming') }}"
+    ovpn_client_prefer_vpn_dns: "{{ client_prefer_vpn_dns | default(true) | bool }}"
     ovpn_ca_content: "{{ ovpn_ca.content | b64decode }}"
     ovpn_ta_content: "{{ ovpn_ta.content | b64decode }}"
     ovpn_crt_content: "{{ ovpn_crt.content | b64decode }}"

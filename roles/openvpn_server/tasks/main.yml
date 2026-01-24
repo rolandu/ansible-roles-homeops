@@ -22,6 +22,7 @@
       - item.openvpn_mgmt_password is defined
       - item.openvpn_mgmt_password | string | trim | length > 0
     fail_msg: "Each VPN entry must define vpn_name, server_hostname, network, netmask, openvpn_ca_passphrase, and openvpn_mgmt_password."
+  no_log: true
   loop: "{{ openvpn_config }}"
   loop_control:
     label: "{{ item.vpn_name | default(item.server_hostname | default('undefined')) }}"

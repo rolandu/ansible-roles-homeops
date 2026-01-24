@@ -1,4 +1,9 @@
 ---
+- name: Reload systemd
+  when: not ansible_check_mode
+  systemd:
+    daemon_reload: yes
+
 - name: Restart OpenVPN client service
   when:
     - openvpn_client_systemd_unit is defined

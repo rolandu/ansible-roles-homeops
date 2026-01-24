@@ -1,0 +1,25 @@
+---
+- name: Enforce forwarding sysctls (gateway mode)
+  when: (openvpn_client_role | lower) == 'gateway'
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv4.conf.all.forwarding
+    - net.ipv4.conf.default.forwarding
+  notify: Restart OpenVPN client service
+
+- name: Set rp_filter to loose mode (gateway mode)
+  when: (openvpn_client_role | lower) == 'gateway'
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "2"
+    state: present
+    reload: yes
+  loop:
+    - net.ipv4.conf.all.rp_filter
+    - net.ipv4.conf.default.rp_filter
+  notify: Restart OpenVPN client service

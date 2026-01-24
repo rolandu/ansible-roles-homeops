@@ -13,7 +13,13 @@ ca ca.crt
 cert server.crt
 key server.key
 dh dh.pem
+# todo: change to tls-crypt and drop the zero (also for the clients)
 tls-auth ta.key 0
+
+# modern tls versions
+tls-version-min 1.2
+data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
+data-ciphers-fallback AES-256-GCM
 
 client-config-dir {{ ccd_dir }}
 {% if openvpn_client_to_client | bool %}
@@ -39,11 +45,24 @@ push "dhcp-option DNS {{ dns }}"
 {% endfor %}
 {% endif %}
 
+allow-compression no
+
+# packet size adjustments to avoid dropping packets
+mssfix 1280
+
+# auto-buffering
+sndbuf 0
+rcvbuf 0
+push "sndbuf 0"
+push "rcvbuf 0"
+
 keepalive 10 120
 persist-key
 persist-tun
 
 user openvpn
 group openvpn
+
+status /run/openvpn/{{ openvpn_vpn_name }}.status 10
 
 verb 3

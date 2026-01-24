@@ -1,0 +1,159 @@
+---
+- name: Fail if NetworkManager is installed
+  when: openvpn_client_has_networkmanager | bool
+  fail:
+    msg: >-
+      NetworkManager is installed on this host; refusing to manage the client via
+      openvpn-client. Remove NetworkManager to proceed.
+
+- name: Install OpenVPN client package
+  apt:
+    name: openvpn
+    state: present
+    update_cache: yes
+  register: openvpn_client_package
+  notify: Restart OpenVPN client service
+
+- name: Set service unit
+  set_fact:
+    openvpn_client_systemd_unit: >-
+      {{
+        'openvpn-client@' + (openvpn_vpn_name + '_' + openvpn_client_name)
+      }}
+
+# section of steps to ensure that VPN DNS is preferred (if configured to do so)
+- name: Define update-resolv-conf candidate paths
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  set_fact:
+    openvpn_client_update_resolvconf_candidates:
+      - "{{ openvpn_client_update_resolvconf_path | default('/etc/openvpn/update-resolv-conf') }}"
+      - /usr/lib/openvpn/update-resolv-conf
+      - /usr/share/doc/openvpn/examples/sample-scripts/update-resolv-conf
+      - /etc/openvpn/scripts/update-resolv-conf
+
+- name: Check update-resolv-conf candidates
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  stat:
+    path: "{{ item }}"
+  loop: "{{ openvpn_client_update_resolvconf_candidates }}"
+  register: openvpn_client_update_resolvconf_stats
+
+- name: Select update-resolv-conf path
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  set_fact:
+    openvpn_client_update_resolvconf_effective_path: >-
+      {{
+        (openvpn_client_update_resolvconf_stats.results
+          | selectattr('stat.exists', 'equalto', true)
+          | map(attribute='item')
+          | list
+          | first)
+        | default('')
+      }}
+
+- name: Fail when update-resolv-conf is missing
+  when:
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+    - openvpn_client_update_resolvconf_effective_path | length == 0
+  fail:
+    msg: >-
+      prefer_vpn_dns is enabled, but no update-resolv-conf script was found.
+      Checked: {{ openvpn_client_update_resolvconf_candidates | join(', ') }}.
+
+- name: Check OpenVPN client unit locations
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /lib/systemd/system/openvpn-client@.service
+    - /usr/lib/systemd/system/openvpn-client@.service
+  register: openvpn_client_unit_stats
+
+- name: Select OpenVPN client unit path
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  set_fact:
+    openvpn_client_unit_path: >-
+      {{
+        (openvpn_client_unit_stats.results
+          | selectattr('stat.exists', 'equalto', true)
+          | map(attribute='item')
+          | list
+          | first)
+        | default('')
+      }}
+
+- name: Fail when OpenVPN client unit is missing
+  when:
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+    - openvpn_client_unit_path | length == 0
+  fail:
+    msg: >-
+      Could not locate openvpn-client@.service. Checked /lib/systemd/system and
+      /usr/lib/systemd/system.
+
+- name: Read OpenVPN client unit
+  when:
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+    - openvpn_client_unit_path | length > 0
+  slurp:
+    src: "{{ openvpn_client_unit_path }}"
+  register: openvpn_client_unit_slurp
+
+- name: Extract ExecStart from unit
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  set_fact:
+    openvpn_client_unit_execstart: >-
+      {{
+        (openvpn_client_unit_slurp.content | b64decode).splitlines()
+          | select('match', '^ExecStart=')
+          | map('regex_replace', '^ExecStart=', '')
+          | list
+          | first
+          | default('')
+      }}
+
+- name: Fail when ExecStart is missing
+  when:
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+    - openvpn_client_unit_execstart | length == 0
+  fail:
+    msg: "Failed to extract ExecStart from {{ openvpn_client_unit_path }}."
+
+- name: Ensure systemd override directory exists
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  file:
+    path: "/etc/systemd/system/{{ openvpn_client_systemd_unit }}.service.d"
+    state: directory
+    mode: "0755"
+
+- name: Install OpenVPN client systemd override for DNS
+  when: openvpn_client_prefer_vpn_dns | default(true) | bool
+  template:
+    src: openvpn-client-override.conf.j2
+    dest: "/etc/systemd/system/{{ openvpn_client_systemd_unit }}.service.d/override.conf"
+    mode: "0644"
+  register: openvpn_client_systemd_override
+  notify:
+    - Reload systemd
+    - Restart OpenVPN client service
+
+- name: Remove OpenVPN client systemd override when VPN DNS is not preferred
+  when: not openvpn_client_prefer_vpn_dns | default(true) | bool
+  file:
+    path: "/etc/systemd/system/{{ openvpn_client_systemd_unit }}.service.d/override.conf"
+    state: absent
+  notify:
+    - Reload systemd
+    - Restart OpenVPN client service
+# end of VPN DNS preference steps
+
+- name: Enforce gateway sysctls when required
+  include_tasks: manage_client_gateway.yml
+
+- name: Enable and start OpenVPN client service
+  systemd:
+    name: "{{ openvpn_client_systemd_unit }}"
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  notify: Restart OpenVPN client service

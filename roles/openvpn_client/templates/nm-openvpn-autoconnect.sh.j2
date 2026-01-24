@@ -1,0 +1,36 @@
+#!/bin/bash
+# Autoconnect OpenVPN when NetworkManager reports internet connectivity.
+
+set -u
+
+IFACE="${1:-}"
+ACTION="${2:-}"
+VPN_NAME="{{ openvpn_client_connection_name }}"
+NMCLI="/usr/bin/nmcli"
+
+case "$ACTION" in
+  up|dhcp4-change|dhcp6-change|connectivity-change)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+if [ ! -x "$NMCLI" ]; then
+  exit 0
+fi
+
+CONNECTIVITY="$($NMCLI -t -f CONNECTIVITY general 2>/dev/null || true)"
+case "$CONNECTIVITY" in
+  full|limited)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+if $NMCLI -t -f NAME,TYPE connection show --active 2>/dev/null | awk -F: '$2=="vpn"{print $1}' | grep -Fxq "$VPN_NAME"; then
+  exit 0
+fi
+
+$NMCLI connection up "$VPN_NAME" >/dev/null 2>&1 || true

@@ -1,6 +1,6 @@
 # openvpn_server
 
-Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCDs, and exported inline `.ovpn` bundles on the controller. The role assumes you want to:
+Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCDs, and exported inline `.ovpn` bundles on the controller. See the client role for how those exports are consumed and managed: [openvpn_client](../openvpn_client/README.md). The role assumes you want to:
 - Stand up a server (or several) with minimal defaults.
 - Onboard one or more gateway clients that may advertise a LAN behind them.
 - Generate configs for roaming/local clients, including export-only clients that are not managed by Ansible.
@@ -22,7 +22,13 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_dns_servers` (list, optional): DNS servers to push to clients (adds `dhcp-option DNS` lines).
   - `openvpn_server_dir` (default: `/etc/openvpn/server`; owned by `openvpn:openvpn`, 0750), `easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `ccd_dir` (default: `/etc/openvpn/ccd`; `openvpn:openvpn`, `0750`, CCD files `0640`).
   - `openvpn_client_to_client` (bool, default: `false`): enable `client-to-client` to allow traffic between VPN clients inside OpenVPN.
-  - `clients` (list): client definitions. Fields: `name` (required), `type` (`gateway`|`roaming`|`local`, default `roaming`), `static_ip` (optional, for CCD if set), `managed` (bool, default `true`; set `false` to export only and skip client role).
+  - `clients` (list): client definitions. Fields:
+    - `name` (required)
+    - `type` (`gateway`|`roaming`|`local`, default `roaming`)
+    - `static_ip` (optional, for CCD if set)
+    - `managed` (bool, default `true`; set `false` to export only and skip client role)
+    - `update_resolvconf_path` (string, default `/etc/openvpn/update-resolv-conf`; client role hint for locating the update-resolv-conf script when VPN DNS is preferred)
+    - `prefer_vpn_dns` (bool, default `true`; when `true` the client will prefer the VPN's DNS resolver over any other one; when `false`, the roles do not force VPN DNS preference and follow their default behavior)
 - `openvpn_default_*` variables control defaults applied when the fields above are omitted:
   - `openvpn_default_port` (default: `1194`), `openvpn_default_proto` (default: `udp4`), `openvpn_default_full_tunnel` (default: `false`).
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`), `openvpn_default_server_dir` (default: `/etc/openvpn/server`), `openvpn_default_easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `openvpn_default_ccd_dir` (default: `/etc/openvpn/ccd`).
@@ -65,7 +71,8 @@ openvpn_config:
     clients:
       - { name: homegateway, type: gateway, static_ip: 10.200.0.10 }
       - { name: laptop1, type: roaming }
-      - { name: fileserver, type: local, managed: false }  # export-only
+      - { name: laptop2, type: roaming }
+      - { name: phone1, type: local, managed: false }  # export-only
 
   # Minimum example: only required fields, all defaults applied
   - vpn_name: lab
