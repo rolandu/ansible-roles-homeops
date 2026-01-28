@@ -36,10 +36,18 @@
   package_facts:
     manager: auto
 
+- name: Gather service facts
+  service_facts:
+
 - name: Determine NetworkManager usage
   set_fact:
-    openvpn_client_has_networkmanager: "{{ 'network-manager' in ansible_facts.packages }}"
-    openvpn_client_use_networkmanager: "{{ 'network-manager' in ansible_facts.packages }}"
+    openvpn_client_nm_pkg_installed: "{{ 'network-manager' in ansible_facts.packages }}"
+    openvpn_client_nm_service_running: >-
+      {{
+        ansible_facts.services is defined and
+        ansible_facts.services.get('NetworkManager.service', {}).state == 'running'
+      }}
+    openvpn_client_use_networkmanager: "{{ openvpn_client_nm_pkg_installed and openvpn_client_nm_service_running }}"
 
 - name: Manage OpenVPN client via NetworkManager
   when: openvpn_client_use_networkmanager | bool

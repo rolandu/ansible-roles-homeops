@@ -19,7 +19,8 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_mgmt_password` (required): password used to enable the management socket; the role writes a password file and adds a `management <bind> <port> <file>` line.
   - `openvpn_mgmt_port`, `openvpn_mgmt_bind` (optional): address/port for the management socket (only used when `openvpn_mgmt_password` is set; defaults: `127.0.0.1` / `7505`).
   - `openvpn_client_export_dir` (default: `/root/openvpn-clients`): server-side export path for generated client bundles.
-  - `openvpn_dns_servers` (list, optional): DNS servers to push to clients (adds `dhcp-option DNS` lines).
+  - `openvpn_dns_servers` (string|list, optional): DNS server IPs to push to clients (adds `dhcp-option DNS` lines). Accepts a single IP string or a list of IP strings (values should be IP addresses).
+  - `openvpn_dns_domain` (string, optional; default `"."`): scope for `dhcp-option DOMAIN-ROUTE`. Only emitted when DNS servers are set. Default `.` makes the VPN DNS the global resolver; set a suffix (e.g., `example.com`) to limit it.
   - `openvpn_server_dir` (default: `/etc/openvpn/server`; owned by `openvpn:openvpn`, 0750), `easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `ccd_dir` (default: `/etc/openvpn/ccd`; `openvpn:openvpn`, `0750`, CCD files `0640`).
   - `openvpn_client_to_client` (bool, default: `false`): enable `client-to-client` to allow traffic between VPN clients inside OpenVPN.
   - `clients` (list): client definitions. Fields:
@@ -27,14 +28,15 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
     - `type` (`gateway`|`roaming`|`local`, default `roaming`)
     - `static_ip` (optional, for CCD if set)
     - `managed` (bool, default `true`; set `false` to export only and skip client role)
-    - `update_resolvconf_path` (string, default `/etc/openvpn/update-resolv-conf`; client role hint for locating the update-resolv-conf script when VPN DNS is preferred)
-    - `prefer_vpn_dns` (bool, default `true`; when `true` the client will prefer the VPN's DNS resolver over any other one; when `false`, the roles do not force VPN DNS preference and follow their default behavior)
+    - `update_resolvconf_path` (string, default `/etc/openvpn/update-resolv-conf`; client role hint used as the first script candidate for both `systemd-resolved` and `resolv.conf` helpers)
+    - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
 - `openvpn_default_*` variables control defaults applied when the fields above are omitted:
   - `openvpn_default_port` (default: `1194`), `openvpn_default_proto` (default: `udp4`), `openvpn_default_full_tunnel` (default: `false`).
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`), `openvpn_default_server_dir` (default: `/etc/openvpn/server`), `openvpn_default_easyrsa_dir` (default: `/etc/openvpn/easy-rsa`), `openvpn_default_ccd_dir` (default: `/etc/openvpn/ccd`).
   - `openvpn_default_clients` (default: `[]`) if no clients list is set.
   - `openvpn_default_mgmt_port` (default: `7505`), `openvpn_default_mgmt_bind` (default: `127.0.0.1`).
   - `openvpn_default_dns_servers` (default: `[]`): DNS servers pushed to clients when `openvpn_dns_servers` is not set.
+  - `openvpn_default_dns_domain` (default: `"."`): domain-route scope pushed when DNS servers are present.
 - `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/openvpn-clients/<vpn_name>_<client>.ovpn`.
 
@@ -68,6 +70,8 @@ openvpn_config:
     easyrsa_dir: "/etc/openvpn/easy-rsa"
     ccd_dir: "/etc/openvpn/ccd"
     openvpn_client_export_dir: "/root/openvpn-clients"
+    openvpn_dns_servers: [ "10.200.0.2", "1.1.1.1" ]
+    openvpn_dns_domain: "example.com"
     clients:
       - { name: homegateway, type: gateway, static_ip: 10.200.0.10 }
       - { name: laptop1, type: roaming }

@@ -22,6 +22,7 @@
     openvpn_clients: "{{ ovpn_server.clients | default(openvpn_default_clients) }}"
     openvpn_client_to_client: "{{ ovpn_server.openvpn_client_to_client | default(openvpn_default_client_to_client) }}"
     openvpn_dns_servers: "{{ ovpn_server.openvpn_dns_servers | default(openvpn_default_dns_servers) }}"
+    openvpn_dns_domain: "{{ ovpn_server.openvpn_dns_domain | default(openvpn_default_dns_domain) }}"
     openvpn_ca_passphrase: "{{ ovpn_server.openvpn_ca_passphrase }}"
     openvpn_ca_build_env: "{{ {'EASYRSA_PASSOUT': 'pass:' + openvpn_ca_passphrase} if openvpn_ca_passphrase | default('') | trim | length > 0 else {} }}"
     openvpn_ca_sign_env: "{{ {'EASYRSA_PASSIN': 'pass:' + openvpn_ca_passphrase} if openvpn_ca_passphrase | default('') | trim | length > 0 else {} }}"

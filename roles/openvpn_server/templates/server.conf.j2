@@ -37,12 +37,13 @@ push "redirect-gateway def1 bypass-dhcp"
 route {{ home_lan_network }} {{ home_lan_netmask }}
 {% endif %}
 
-{% if openvpn_dns_servers is string %}
-push "dhcp-option DNS {{ openvpn_dns_servers }}"
-{% else %}
-{% for dns in openvpn_dns_servers | flatten %}
+{% set _dns_list = [openvpn_dns_servers] if openvpn_dns_servers is string else (openvpn_dns_servers | flatten) %}
+{% if _dns_list | length > 0 %}
+{% for dns in _dns_list %}
 push "dhcp-option DNS {{ dns }}"
 {% endfor %}
+{% set _dns_domain = (openvpn_dns_domain | default('.', true) | trim) or '.' %}
+push "dhcp-option DOMAIN-ROUTE {{ _dns_domain }}"
 {% endif %}
 
 allow-compression no

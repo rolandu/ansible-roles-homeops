@@ -1,3 +1,3 @@
 [Service]
 ExecStart=
-ExecStart={{ openvpn_client_unit_execstart }} --script-security 2 --up {{ openvpn_client_update_resolvconf_effective_path }} --down {{ openvpn_client_update_resolvconf_effective_path }}
+ExecStart={{ openvpn_client_unit_execstart }} --script-security 2{% if openvpn_client_dns_use_down_pre %} --down-pre{% endif %}{% if openvpn_client_dns_path_env %} --setenv PATH {{ openvpn_client_dns_path_env }}{% endif %} --up {{ openvpn_client_dns_script_path }} --down {{ openvpn_client_dns_script_path }}

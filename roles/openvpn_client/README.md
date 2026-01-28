@@ -13,8 +13,10 @@ Install and configure an OpenVPN client from exported inline `.ovpn` profiles. T
 ## Behavior
 
 - Iterates over `openvpn_config`; skips any VPN where this client is not listed or is marked `managed: false` (export-only).
-- Supports both OpenVPN systemd clients and NetworkManager-managed VPNs; the role auto-selects based on whether NetworkManager is installed.
-- `openvpn-client`-path: drops the exported `.ovpn` as a systemd instance config, manages `openvpn-client@<vpn>_<client>`, and can install a systemd drop-in to prefer VPN DNS.
+- Supports both OpenVPN systemd clients and NetworkManager-managed VPNs; the role auto-selects only when NetworkManager is installed *and running*.
+- `openvpn-client`-path: drops the exported `.ovpn` as a systemd instance config, manages `openvpn-client@<vpn>_<client>`, and always installs a systemd drop-in to pass OpenVPN’s pushed DNS data to the active resolver:
+  - If `systemd-resolved` is running, the role installs `openvpn-systemd-resolved` and wires `update-systemd-resolved` via `--up/--down --down-pre`.
+  - Otherwise it falls back to `update-resolv-conf`. A custom script path provided via `update_resolvconf_path` is always tried first and works for either resolver helper.
 - *NetworkManager*-path: imports the `.ovpn` via `nmcli`, keeps the connection alive, and optionally installs a dispatcher auto-connect script.
 - Copies the exported config bundle from the controller to `<conf_dir>/<vpn_name>_<client>.conf` and applies gateway sysctls when requested.
 - Client roles (`gateway`/`roaming`/`local`) and their semantics are defined in the server's README, since the server schema is the single source of truth.
@@ -23,6 +25,7 @@ Install and configure an OpenVPN client from exported inline `.ovpn` profiles. T
 
 This role treats DNS differently depending on how the client is managed:
 
-- OpenVPN systemd clients: when `prefer_vpn_dns: true`, the role locates `update-resolv-conf` and installs a systemd drop-in that appends `--script-security 2 --up ... --down ...` to the unit’s `ExecStart`. This keeps the base unit intact and applies DNS updates at connect/disconnect time.
-- NetworkManager clients: when `prefer_vpn_dns: true`, the connection is modified with `ipv4.ignore-auto-dns no` and a negative `ipv4.dns-priority` so VPN DNS takes precedence. When `prefer_vpn_dns: false`, the role leaves DNS settings alone (default behavior).
-- Exported client configs: when `prefer_vpn_dns: false`, the role does not add any DNS-specific overrides; OpenVPN uses its default behavior.
+- OpenVPN systemd clients: DNS pushed by the server is always applied. The role auto-detects `systemd-resolved` (uses `update-systemd-resolved` with `--down-pre`) and otherwise uses `update-resolv-conf`.
+- Custom script path: `update_resolvconf_path` (from the server config) is tried first for both helpers; if unset, standard locations are probed.
+- NetworkManager clients: `prefer_vpn_dns` still controls priority; when `true` the connection is modified with `ipv4.ignore-auto-dns no` and a negative `ipv4.dns-priority`. When `false`, the role leaves DNS settings alone (default behavior).
+- Exported client configs: no DNS-specific edits are added; the helper scripts simply honor what the server pushes at connect/disconnect time.
