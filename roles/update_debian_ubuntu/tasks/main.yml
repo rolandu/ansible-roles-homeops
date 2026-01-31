@@ -27,6 +27,7 @@
   when:
     - perform_reboot_if_needed | bool
     - update_debian_ubuntu_reboot_flag.stat.exists
+  throttle: 1  # only one host performs this task at a time
 
 - name: Show result
   ansible.builtin.debug:
