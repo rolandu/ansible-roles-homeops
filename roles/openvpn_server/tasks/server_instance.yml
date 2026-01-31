@@ -11,14 +11,6 @@
     openvpn_port: "{{ ovpn_server.port | default(openvpn_default_port) }}"
     openvpn_proto_base: "{{ (ovpn_server.proto | default(openvpn_default_proto)) | lower }}"
     openvpn_dual_stack: "{{ ovpn_server.dual_stack | default(openvpn_default_dual_stack) }}"
-    openvpn_proto: "{{ openvpn_proto_base ~ ('6' if openvpn_dual_stack | bool else '4') }}"
-    openvpn_client_proto: "{{ openvpn_proto_base }}"
-    openvpn_remote_protos: >-
-      {{
-        [openvpn_proto_base ~ '6', openvpn_proto_base ~ '4']
-        if openvpn_dual_stack | bool else
-        [openvpn_proto_base ~ '4']
-      }}
     home_lan_network: "{{ ovpn_server.home_lan_network | default('') }}"
     home_lan_netmask: "{{ ovpn_server.home_lan_netmask | default('') }}"
     openvpn_full_tunnel: "{{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel) }}"
@@ -38,6 +30,17 @@
     openvpn_mgmt_password: "{{ ovpn_server.openvpn_mgmt_password }}"
     openvpn_mgmt_port: "{{ ovpn_server.openvpn_mgmt_port | default(openvpn_default_mgmt_port) }}"
     openvpn_mgmt_bind: "{{ ovpn_server.openvpn_mgmt_bind | default(openvpn_default_mgmt_bind) }}"
+
+- name: Set protocol-derived facts ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_proto: "{{ openvpn_proto_base ~ ('6' if openvpn_dual_stack | bool else '4') }}"
+    openvpn_client_proto: "{{ openvpn_proto_base }}"
+    openvpn_remote_protos: >-
+      {{
+        [openvpn_proto_base ~ '6', openvpn_proto_base ~ '4']
+        if openvpn_dual_stack | bool else
+        [openvpn_proto_base ~ '4']
+      }}
 
 - name: Normalize DNS domain list ({{ openvpn_vpn_name }})
   set_fact:
