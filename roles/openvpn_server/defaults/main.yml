@@ -17,4 +17,4 @@ openvpn_default_dns_domain: "."
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 
 # Global path base for exported configs on controller (shared with client role)
-openvpn_client_local_dir_base: "{{ artifacts_dir }}"
+openvpn_client_local_dir_base: "{{ artifacts_dir }}/openvpn-clients"

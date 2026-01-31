@@ -25,7 +25,6 @@ client-config-dir {{ ccd_dir }}
 {% if openvpn_client_to_client | bool %}
 client-to-client
 {% endif %}
-client-to-client
 
 # Explicitly control tunnel mode
 {% if openvpn_full_tunnel %}
@@ -38,12 +37,14 @@ route {{ home_lan_network }} {{ home_lan_netmask }}
 {% endif %}
 
 {% set _dns_list = [openvpn_dns_servers] if openvpn_dns_servers is string else (openvpn_dns_servers | flatten) %}
+{% set _dns_domains = openvpn_dns_domains_route | default([]) %}
 {% if _dns_list | length > 0 %}
 {% for dns in _dns_list %}
 push "dhcp-option DNS {{ dns }}"
 {% endfor %}
-{% set _dns_domain = (openvpn_dns_domain | default('.', true) | trim) or '.' %}
-push "dhcp-option DOMAIN-ROUTE {{ _dns_domain }}"
+{% for dns_domain in _dns_domains %}
+push "dhcp-option DOMAIN-ROUTE {{ dns_domain }}"
+{% endfor %}
 {% endif %}
 
 allow-compression no

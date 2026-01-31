@@ -9,7 +9,7 @@ openvpn_config: []
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 
 # Global path base for exported configs on the controller
-openvpn_client_local_dir_base: "{{ artifacts_dir }}"
+openvpn_client_local_dir_base: "{{ artifacts_dir }}/openvpn-clients"
 
 # Install a NetworkManager dispatcher script to auto-connect VPN when internet is available
 openvpn_client_nm_autoconnect_dispatcher: true

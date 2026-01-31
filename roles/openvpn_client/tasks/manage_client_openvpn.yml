@@ -1,11 +1,4 @@
 ---
-- name: Fail if NetworkManager is running
-  when: openvpn_client_nm_service_running | default(false) | bool
-  fail:
-    msg: >-
-      NetworkManager is running on this host; refusing to manage the client via
-      openvpn-client. Stop/disable NetworkManager or let it manage the VPN instead.
-
 - name: Install OpenVPN client package
   apt:
     name: openvpn
@@ -37,7 +30,27 @@
         else 'resolvconf'
       }}
 
-- name: Ensure systemd-resolved helper package is present when needed
+# Allow an explicit helper override to short-circuit discovery
+- name: Use DNS helper script override when provided
+  when: openvpn_client_dns_helper_script_override | default('') | trim | length > 0
+  block:
+    - name: Set DNS helper path from override
+      set_fact:
+        openvpn_client_dns_script_path: "{{ openvpn_client_dns_helper_script_override | trim }}"
+
+    - name: Validate DNS helper override exists
+      stat:
+        path: "{{ openvpn_client_dns_script_path }}"
+      register: openvpn_client_dns_override_stat
+
+    - name: Fail when DNS helper override is missing
+      when: not openvpn_client_dns_override_stat.stat.exists
+      fail:
+        msg: >-
+          DNS helper override path {{ openvpn_client_dns_script_path }} was provided
+          but does not exist.
+
+- name: Ensure systemd-resolved helper package is present if DNS handler is systemd-resolved
   when: openvpn_client_dns_handler == 'systemd-resolved'
   apt:
     name: openvpn-systemd-resolved
@@ -46,57 +59,65 @@
   register: openvpn_client_resolved_package
   notify: Restart OpenVPN client service
 
-- name: Define DNS update script candidates
-  set_fact:
-    openvpn_client_dns_script_candidates: >-
-      {{
-        (
-          ([openvpn_client_update_resolvconf_path]
-            | select('string')
-            | map('trim')
-            | select('length')
-            | list)
-        )
-        +
-        (
-          [
-            '/etc/openvpn/update-systemd-resolved',
-            '/usr/lib/openvpn/update-systemd-resolved',
-            '/usr/share/doc/openvpn/examples/sample-scripts/update-systemd-resolved'
-          ] if openvpn_client_dns_handler == 'systemd-resolved'
-          else [
-            '/etc/openvpn/update-resolv-conf',
-            '/usr/lib/openvpn/update-resolv-conf',
-            '/usr/share/doc/openvpn/examples/sample-scripts/update-resolv-conf',
-            '/etc/openvpn/scripts/update-resolv-conf'
-          ]
-        )
-      }}
+- name: DNS helper discovery if no override is set
+  when: openvpn_client_dns_helper_script_override | default('') | trim | length == 0
+  block:
+    - name: Define DNS update script candidates for systemd-resolved
+      when: openvpn_client_dns_handler == 'systemd-resolved'
+      set_fact:
+        openvpn_client_dns_script_candidates: >-
+          {{
+            [
+              '/etc/openvpn/update-systemd-resolved',
+              '/usr/lib/openvpn/update-systemd-resolved',
+              '/usr/share/doc/openvpn/examples/sample-scripts/update-systemd-resolved'
+            ]
+          }}
 
-- name: Check DNS update script candidates
-  stat:
-    path: "{{ item }}"
-  loop: "{{ openvpn_client_dns_script_candidates }}"
-  register: openvpn_client_dns_script_stats
+    - name: Define DNS update script candidates for resolvconf
+      when: openvpn_client_dns_handler == 'resolvconf'
+      set_fact:
+        openvpn_client_dns_script_candidates: >-
+          {{
+            [
+              '/etc/openvpn/update-resolv-conf',
+              '/usr/lib/openvpn/update-resolv-conf',
+              '/usr/share/doc/openvpn/examples/sample-scripts/update-resolv-conf',
+              '/etc/openvpn/scripts/update-resolv-conf'
+            ]
+          }}
 
-- name: Select DNS update script path
-  set_fact:
-    openvpn_client_dns_script_path: >-
-      {{
-        (openvpn_client_dns_script_stats.results
-          | selectattr('stat.exists', 'equalto', true)
-          | map(attribute='item')
-          | list
-          | first)
-        | default('')
-      }}
+    - name: Check DNS update script candidates
+      stat:
+        path: "{{ item }}"
+      loop: "{{ openvpn_client_dns_script_candidates }}"
+      register: openvpn_client_dns_script_stats
 
-- name: Fail when DNS update script is missing
-  when: openvpn_client_dns_script_path | length == 0
-  fail:
+    - name: Select DNS update script path
+      set_fact:
+        openvpn_client_dns_script_path: >-
+          {{
+            (openvpn_client_dns_script_stats.results
+              | selectattr('stat.exists', 'equalto', true)
+              | map(attribute='item')
+              | list
+              | first)
+            | default('')
+          }}
+
+    - name: Fail when DNS update script is missing
+      when: openvpn_client_dns_script_path | length == 0
+      fail:
+        msg: >-
+          No DNS update script found for resolver handler {{ openvpn_client_dns_handler }}.
+          Checked: {{ openvpn_client_dns_script_candidates | join(', ') }}.
+
+- name: Report DNS helper selection
+  when: openvpn_client_dns_script_path | default('') | trim | length > 0
+  debug:
     msg: >-
-      No DNS update script found for resolver handler {{ openvpn_client_dns_handler }}.
-      Checked: {{ openvpn_client_dns_script_candidates | join(', ') }}.
+      Using DNS helper {{ openvpn_client_dns_script_path }} (handler={{ openvpn_client_dns_handler }},
+      source={{ 'override' if openvpn_client_dns_helper_script_override | default('') | trim | length > 0 else 'discovered' }}).
 
 - name: Set DNS hook options for override
   set_fact:
@@ -175,7 +196,8 @@
     - Restart OpenVPN client service
 # end of DNS resolver wiring
 
-- name: Enforce gateway sysctls when required
+- name: Enforce gateway sysctls if this client is a gateway
+  when: (openvpn_client_role | lower) == 'gateway'
   include_tasks: manage_client_gateway.yml
 
 - name: Enable and start OpenVPN client service

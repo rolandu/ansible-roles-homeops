@@ -6,8 +6,8 @@
 
 - name: Derive local artifact paths
   set_fact:
-    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients"
-    openvpn_client_local_config_file: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients/{{ openvpn_vpn_name }}_{{ openvpn_client_name }}.ovpn"
+    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}"
+    openvpn_client_local_config_file: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/{{ openvpn_vpn_name }}_{{ openvpn_client_name }}.ovpn"
 
 - name: Select client entry from configuration
   set_fact:
@@ -18,8 +18,31 @@
   set_fact:
     openvpn_client_role: "{{ openvpn_client_entry.type | default('roaming') }}"
     openvpn_client_managed: "{{ openvpn_client_entry.managed | default(true) }}"
-    openvpn_client_update_resolvconf_path: "{{ openvpn_client_entry.update_resolvconf_path | default('/etc/openvpn/update-resolv-conf') }}"
+    openvpn_client_dns_helper_script_override: "{{ openvpn_client_entry.dns_helper_script_override | default('') }}"
     openvpn_client_prefer_vpn_dns: "{{ openvpn_client_entry.prefer_vpn_dns | default(true) | bool }}"
+
+- name: Capture DNS settings from server definition
+  set_fact:
+    openvpn_dns_servers_raw: "{{ ovpn_server.openvpn_dns_servers | default([]) }}"
+    openvpn_dns_domains_raw: "{{ ovpn_server.openvpn_dns_domain | default('.') }}"
+
+- name: Normalize DNS server and domain lists
+  set_fact:
+    openvpn_dns_servers: "{{ [openvpn_dns_servers_raw] if openvpn_dns_servers_raw is string else (openvpn_dns_servers_raw | flatten) }}"
+    openvpn_dns_domains: >-
+      {{
+        (
+          (openvpn_dns_domains_raw | regex_replace('\\s+', ' ') | trim)
+        ).split(' ')
+        if openvpn_dns_domains_raw is string
+        else (openvpn_dns_domains_raw | flatten)
+      }}
+
+- name: Finalize DNS domains for NetworkManager
+  set_fact:
+    openvpn_dns_domains: "{{ (openvpn_dns_domains | reject('equalto', '') | list) or ['.'] }}"
+    openvpn_dns_domains_route: "{{ openvpn_dns_domains | map('regex_replace', '^~', '') | list }}"
+    openvpn_dns_domains_search: "{{ openvpn_dns_domains | map('regex_replace', '^~?(.*)$', '~\\1') | list }}"
 
 - name: Skip server if client entry is missing or client unmanaged
   when: (openvpn_client_entry | length == 0) or not (openvpn_client_managed | default(true) | bool)

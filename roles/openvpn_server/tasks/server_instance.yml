@@ -15,7 +15,7 @@
     openvpn_full_tunnel: "{{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel) }}"
     openvpn_remote_host: "{{ ovpn_server.openvpn_remote_host | default(openvpn_server_hostname | default(ansible_host | default(inventory_hostname))) }}"
     openvpn_client_export_dir: "{{ ovpn_server.openvpn_client_export_dir | default(openvpn_default_client_export_dir) }}"
-    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}/openvpn-clients"
+    openvpn_client_local_dir: "{{ openvpn_client_local_dir_base }}/{{ openvpn_vpn_name }}"
     openvpn_server_dir: "{{ ovpn_server.openvpn_server_dir | default(openvpn_default_server_dir) }}"
     easyrsa_dir: "{{ ovpn_server.easyrsa_dir | default(openvpn_default_easyrsa_dir) }}"
     ccd_dir: "{{ ovpn_server.ccd_dir | default(openvpn_default_ccd_dir) }}"
@@ -29,6 +29,23 @@
     openvpn_mgmt_password: "{{ ovpn_server.openvpn_mgmt_password }}"
     openvpn_mgmt_port: "{{ ovpn_server.openvpn_mgmt_port | default(openvpn_default_mgmt_port) }}"
     openvpn_mgmt_bind: "{{ ovpn_server.openvpn_mgmt_bind | default(openvpn_default_mgmt_bind) }}"
+
+- name: Normalize DNS domain list ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_dns_domains: >-
+      {{
+        (
+          (openvpn_dns_domain | regex_replace('\\s+', ' ') | trim)
+        ).split(' ')
+        if openvpn_dns_domain is string
+        else (openvpn_dns_domain | flatten)
+      }}
+
+- name: Derive DNS domain scopes ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_dns_domains: "{{ (openvpn_dns_domains | reject('equalto', '') | list) or ['.'] }}"
+    openvpn_dns_domains_route: "{{ openvpn_dns_domains | map('regex_replace', '^~', '') | list }}"
+    openvpn_dns_domains_search: "{{ openvpn_dns_domains | map('regex_replace', '^~?(.*)$', '~\\1') | list }}"
 
 - name: Set derived paths ({{ openvpn_vpn_name }})
   set_fact:

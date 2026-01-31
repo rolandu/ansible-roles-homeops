@@ -32,6 +32,7 @@
   register: openvpn_client_config_copy
   notify: Restart OpenVPN client service
 
+# Checking what is installed and running
 - name: Gather installed packages
   package_facts:
     manager: auto
@@ -39,20 +40,28 @@
 - name: Gather service facts
   service_facts:
 
-- name: Determine NetworkManager usage
+- name: Detect NetworkManager
+  vars:
+    nm_pkg: "{{ 'network-manager' in ansible_facts.packages }}"
   set_fact:
-    openvpn_client_nm_pkg_installed: "{{ 'network-manager' in ansible_facts.packages }}"
-    openvpn_client_nm_service_running: >-
+    openvpn_client_nm_pkg_installed: "{{ nm_pkg }}"
+
+- name: Check if NetworkManager is active
+  vars:
+    nm_running: >-
       {{
         ansible_facts.services is defined and
         ansible_facts.services.get('NetworkManager.service', {}).state == 'running'
       }}
-    openvpn_client_use_networkmanager: "{{ openvpn_client_nm_pkg_installed and openvpn_client_nm_service_running }}"
+  set_fact:
+    openvpn_client_nm_service_running: "{{ nm_running }}"
 
+# Only if both checks are true, manage via NetworkManager
 - name: Manage OpenVPN client via NetworkManager
-  when: openvpn_client_use_networkmanager | bool
+  when: openvpn_client_nm_pkg_installed | bool and openvpn_client_nm_service_running | bool
   include_tasks: manage_client_networkmanager.yml
 
+# If either check is false, manage via openvpn-client
 - name: Manage OpenVPN client via openvpn-client
-  when: not openvpn_client_use_networkmanager | bool
+  when: not (openvpn_client_nm_pkg_installed | bool and openvpn_client_nm_service_running | bool)
   include_tasks: manage_client_openvpn.yml

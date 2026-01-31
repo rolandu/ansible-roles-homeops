@@ -25,16 +25,6 @@
       NetworkManager is not running according to nmcli; ensure it is managing
       networking before using the NetworkManager path.
 
-# Remove any existing OpenVPN packages to avoid conflicts
-- name: Remove OpenVPN packages if present
-  apt:
-    name: "{{ item }}"
-    state: absent
-  loop:
-    - openvpn
-    - openvpn-client
-  when: item in ansible_facts.packages
-
 - name: Install NetworkManager OpenVPN plugin
   apt:
     name: network-manager-openvpn
@@ -119,6 +109,17 @@
     nmcli connection modify "{{ openvpn_client_connection_name }}"
     ipv4.ignore-auto-dns no
     ipv4.dns-priority -50
+  changed_when: false
+
+- name: Force VPN DNS routing domains in NetworkManager connection
+  when:
+    - openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
+    - openvpn_client_prefer_vpn_dns | default(true) | bool
+    - openvpn_dns_servers | length > 0
+  command: >-
+    nmcli connection modify "{{ openvpn_client_connection_name }}"
+    ipv4.dns-search "{{ openvpn_dns_domains_search | join(',') }}"
+    ipv6.dns-search "{{ openvpn_dns_domains_search | join(',') }}"
   changed_when: false
 
 - name: List active NetworkManager connections
