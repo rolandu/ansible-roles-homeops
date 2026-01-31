@@ -9,7 +9,16 @@
     openvpn_network: "{{ ovpn_server.network }}"
     openvpn_netmask: "{{ ovpn_server.netmask }}"
     openvpn_port: "{{ ovpn_server.port | default(openvpn_default_port) }}"
-    openvpn_proto: "{{ ovpn_server.proto | default(openvpn_default_proto) }}"
+    openvpn_proto_base: "{{ (ovpn_server.proto | default(openvpn_default_proto)) | lower }}"
+    openvpn_dual_stack: "{{ ovpn_server.dual_stack | default(openvpn_default_dual_stack) }}"
+    openvpn_proto: "{{ openvpn_proto_base ~ ('6' if openvpn_dual_stack | bool else '4') }}"
+    openvpn_client_proto: "{{ openvpn_proto_base }}"
+    openvpn_remote_protos: >-
+      {{
+        [openvpn_proto_base ~ '6', openvpn_proto_base ~ '4']
+        if openvpn_dual_stack | bool else
+        [openvpn_proto_base ~ '4']
+      }}
     home_lan_network: "{{ ovpn_server.home_lan_network | default('') }}"
     home_lan_netmask: "{{ ovpn_server.home_lan_netmask | default('') }}"
     openvpn_full_tunnel: "{{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel) }}"
@@ -204,6 +213,15 @@
     - net.ipv4.conf.default.rp_filter
   notify: Restart OpenVPN server instance
 
+- name: Ensure IPv6 dual-stack socket binding is enabled ({{ openvpn_vpn_name }})
+  when: openvpn_dual_stack | bool
+  ansible.posix.sysctl:
+    name: net.ipv6.bindv6only
+    value: "0"
+    state: present
+    reload: yes
+  notify: Restart OpenVPN server instance
+
 - name: Verify OpenVPN service is active ({{ openvpn_vpn_name }})
   command: "systemctl is-active openvpn-server@{{ openvpn_vpn_name }}"
   register: openvpn_service_status
@@ -219,7 +237,7 @@
     timeout: 30
   when:
     - not ansible_check_mode
-    - (openvpn_proto | lower) == 'tcp'
+    - openvpn_proto_base == 'tcp'
   notify: Restart OpenVPN server instance
 
 - name: Ensure ownership and 0770 on server directories ({{ openvpn_vpn_name }})

@@ -1,6 +1,8 @@
 # Defaults applied to each openvpn_config entry when a field is omitted
 openvpn_default_port: 1194
-openvpn_default_proto: udp4
+# Base proto: only udp or tcp; dual_stack controls v4/v6 socket choice
+openvpn_default_proto: udp
+openvpn_default_dual_stack: true
 openvpn_default_full_tunnel: false
 openvpn_default_client_export_dir: "/root/openvpn-clients"
 openvpn_default_server_dir: "/etc/openvpn/server"

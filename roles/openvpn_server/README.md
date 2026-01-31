@@ -11,7 +11,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `vpn_name` (required): logical VPN name; used for systemd unit/config filenames and certificate CNs.
   - `server_hostname` (required): inventory/host name that should host this VPN (matched against `inventory_hostname`, `ansible_hostname`, or `ansible_fqdn`).
   - `network` / `netmask` (required): VPN subnet.
-  - `port` (default: `1194`), `proto` (default: `udp4`; valid options: `udp`, `udp4`, `udp6`, `tcp`, `tcp4`, `tcp6`).
+  - `port` (default: `1194`), `proto` (default: `udp`; valid options: `udp`, `tcp`), `dual_stack` (bool, default: `true`): when `true`, listeners use `udp6`/`tcp6` and clients get both `remote ... <proto>6` and `<proto>4`; when `false`, listeners use `udp4`/`tcp4` and clients get only `... <proto>4`.
   - `openvpn_remote_host` (string, required for clients): hostname/IP clients connect to (defaults to `server_hostname`).
   - `home_lan_network`, `home_lan_netmask` (optional): advertise a LAN behind a gateway; if set, the role emits `route`/`iroute`/pull-filter bits as appropriate for client types.
   - `openvpn_full_tunnel` (bool, default: `false`): push `redirect-gateway` to clients.
@@ -31,7 +31,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
     - `dns_helper_script_override` (string, optional; default empty): absolute path to a DNS helper script on the client. When set, the client role uses this path directly and skips helper auto-discovery.
     - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
 - `openvpn_default_*` variables control defaults applied when the fields above are omitted:
-  - `openvpn_default_port` (default: `1194`), `openvpn_default_proto` (default: `udp4`), `openvpn_default_full_tunnel` (default: `false`).
+  - `openvpn_default_port` (default: `1194`), `openvpn_default_proto` (default: `udp`), `openvpn_default_dual_stack` (default: `true`), `openvpn_default_full_tunnel` (default: `false`).
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`)
   - `openvpn_default_server_dir` (default: `/etc/openvpn/server`)
   - `openvpn_default_easyrsa_dir` (default: `/etc/openvpn/easy-rsa`)
@@ -41,10 +41,11 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_default_mgmt_bind` (default: `127.0.0.1`)
   - `openvpn_default_dns_servers` (default: `[]`): DNS servers pushed to clients when `openvpn_dns_servers` is not set.
   - `openvpn_default_dns_domain` (default: `"."`): domain-route scope pushed when DNS servers are present.
+  - `openvpn_default_dual_stack` (default: `true`)
 - `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}/openvpn-clients`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/<vpn_name>_<client>.ovpn`.
 
-Protocol note: we default to `udp4` to avoid IPv6 blackholes and keep connects quick; switch to `udp6`/`udp`/`tcp*` only if you need IPv6 or TCP traversal.
+Protocol note: we default to `udp` with `dual_stack: true`, rendering `proto udp6` on the server so IPv4-mapped connects succeed when `net.ipv6.bindv6only=0` (this role enforces that sysctl). Set `dual_stack: false` to force IPv4-only sockets (`udp4`/`tcp4`).
 
 ### Client types
 - `gateway`: may serve a LAN behind it; CCD gets `iroute` for `home_lan_*`, and clients get LAN route guards/pull-filters accordingly. Gateway nodes also enable forwarding/rp_filter loosening in the client role.
@@ -60,7 +61,8 @@ openvpn_config:
     server_hostname: homeserver
     network: 10.200.0.0
     netmask: 255.255.255.0
-    proto: udp4
+    proto: udp
+    dual_stack: true
     port: 1194
     home_lan_network: 10.35.0.0
     home_lan_netmask: 255.255.255.0

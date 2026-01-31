@@ -1,7 +1,8 @@
 client
 dev tun
-proto {{ openvpn_proto }}
-remote {{ openvpn_remote_host }} {{ openvpn_port }}
+{% for remote_proto in openvpn_remote_protos %}
+remote {{ openvpn_remote_host }} {{ openvpn_port }} {{ remote_proto }}
+{% endfor %}
 resolv-retry infinite
 nobind
 

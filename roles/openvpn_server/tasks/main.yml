@@ -27,6 +27,16 @@
   loop_control:
     label: "{{ item.vpn_name | default(item.server_hostname | default('undefined')) }}"
 
+- name: Validate protocol settings per VPN definition
+  assert:
+    that:
+      - (item.proto | default(openvpn_default_proto) | lower) in ['udp', 'tcp']
+      - (item.dual_stack | default(openvpn_default_dual_stack)) | type_debug in ['bool']
+    fail_msg: "proto must be udp or tcp; dual_stack must be boolean."
+  loop: "{{ openvpn_config }}"
+  loop_control:
+    label: "{{ item.vpn_name | default(item.server_hostname | default('undefined')) }}"
+
 - name: Configure OpenVPN server instances
   include_tasks: server_instance.yml
   loop: "{{ openvpn_config | default([]) }}"

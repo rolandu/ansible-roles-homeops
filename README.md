@@ -2,6 +2,8 @@
 
 > [!WARNING]
 > I am still new to do this. Use at your own risk!
+>
+> Early version. Breaking changes possible at any time.
 
 Ansible roles for home/family infrastructure (servers, laptops, workstations, etc.).
 
