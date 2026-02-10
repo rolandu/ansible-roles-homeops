@@ -31,9 +31,12 @@ client-to-client
 push "redirect-gateway def1 bypass-dhcp"
 {% endif %}
 
-# route to home network (optional)
-{% if (home_lan_network | default('') | trim | length > 0) and (home_lan_netmask | default('') | trim | length > 0) %}
-route {{ home_lan_network }} {{ home_lan_netmask }}
+# routes to gateway networks (optional)
+{% set _gateway_networks = openvpn_gateway_networks | default([]) %}
+{% if _gateway_networks | length > 0 %}
+{% for gw_net in _gateway_networks %}
+route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}
+{% endfor %}
 {% endif %}
 
 {% set _dns_list = [openvpn_dns_servers] if openvpn_dns_servers is string else (openvpn_dns_servers | flatten) %}

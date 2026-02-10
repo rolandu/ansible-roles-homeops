@@ -6,7 +6,7 @@ ifconfig-push {{ ovpn_client_static_ip }} {{ openvpn_netmask }}
 {% for gw_net in ovpn_client_gateway_networks | default([]) -%}
 iroute {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}
 {% endfor -%}
-{% elif ovpn_client_type == 'roaming' -%}
+{% elif ovpn_client_type in ['roaming', 'local'] -%}
 {% for gw_net in openvpn_gateway_networks | default([]) -%}
 push "route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}"
 {% endfor -%}

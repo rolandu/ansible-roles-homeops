@@ -30,6 +30,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
     - `gateway_networks` (list, required for `gateway`): one or more networks advertised by this gateway. Each entry supports:
       - `gateway_network_ip` (required)
       - `gateway_network_netmask` (required)
+    - `local_ignore_networks` (list, optional; for `local`): networks to ignore when the server pushes LAN routes. Entries use the same schema as `gateway_networks`.
     - `managed` (bool, default `true`; set `false` to export only and skip client role)
     - `dns_helper_script_override` (string, optional; default empty): absolute path to a DNS helper script on the client. When set, the client role uses this path directly and skips helper auto-discovery.
     - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
@@ -53,7 +54,7 @@ Protocol note: we default to `udp` with `dual_stack: true`, rendering `proto udp
 ### Client types
 - `gateway`: may serve one or more LANs behind it; CCD gets `iroute` entries for `gateway_networks`, and clients get LAN route guards/pull-filters accordingly. Gateway nodes also enable forwarding/rp_filter loosening in the client role.
 - `roaming`: typical laptop/remote user; accepts pushed LAN routes and has no forwarding enabled.
-- `local`: meant to stay on the home LAN; receives pull-filter to ignore LAN routes (prevents hairpin), but otherwise acts like roaming. Good for export-only static devices.
+- `local`: meant to stay on a certain LAN; receives pull-filter to ignore selected LAN routes (prevents hairpin) via `local_ignore_networks`, but otherwise acts like roaming. Good for export-only static devices, like local servers.
 
 ## Example vars
 
@@ -90,7 +91,12 @@ openvpn_config:
             gateway_network_netmask: 255.255.255.0
       - { name: laptop1, type: roaming }
       - { name: laptop2, type: roaming }
-      - { name: phone1, type: local, managed: false }  # export-only
+      - name: phone1
+        type: local
+        managed: false
+        local_ignore_networks:
+          - gateway_network_ip: 10.41.0.0
+            gateway_network_netmask: 255.255.255.0
 
   # Minimum example: only required fields, all defaults applied
   - vpn_name: lab

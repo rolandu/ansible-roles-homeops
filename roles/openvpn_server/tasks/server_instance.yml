@@ -68,6 +68,33 @@
     loop_var: ovpn_gateway_pair
     label: "{{ ovpn_gateway_pair.0.name | default('unnamed') }} -> {{ ovpn_gateway_pair.1.gateway_network_ip | default('undefined') }}"
 
+- name: Validate local ignore networks are list ({{ openvpn_vpn_name }})
+  when: ovpn_client.local_ignore_networks is defined
+  assert:
+    that:
+      - (ovpn_client.local_ignore_networks | default([])) | type_debug == 'list'
+    fail_msg: "Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define local_ignore_networks as a list."
+  loop: "{{ openvpn_clients | selectattr('type', 'equalto', 'local') | list }}"
+  loop_control:
+    loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
+
+- name: Validate local ignore network entries ({{ openvpn_vpn_name }})
+  assert:
+    that:
+      - ovpn_local_network.gateway_network_ip is defined
+      - ovpn_local_network.gateway_network_ip | string | trim | length > 0
+      - ovpn_local_network.gateway_network_netmask is defined
+      - ovpn_local_network.gateway_network_netmask | string | trim | length > 0
+    fail_msg: "Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_network_ip and gateway_network_netmask for each local_ignore_networks entry."
+  vars:
+    ovpn_client: "{{ ovpn_local_pair.0 }}"
+    ovpn_local_network: "{{ ovpn_local_pair.1 }}"
+  loop: "{{ (openvpn_clients | selectattr('type', 'equalto', 'local') | list) | subelements('local_ignore_networks', skip_missing=True) }}"
+  loop_control:
+    loop_var: ovpn_local_pair
+    label: "{{ ovpn_local_pair.0.name | default('unnamed') }} -> {{ ovpn_local_pair.1.gateway_network_ip | default('undefined') }}"
+
 - name: Set protocol-derived facts ({{ openvpn_vpn_name }})
   set_fact:
     openvpn_proto: "{{ openvpn_proto_base ~ ('6' if openvpn_dual_stack | bool else '4') }}"
@@ -337,7 +364,7 @@
     ovpn_client_static_ip: "{{ ovpn_client.static_ip | default('') }}"
     ovpn_client_gateway_networks: "{{ ovpn_client.gateway_networks | default([]) }}"
   when:
-    - (ovpn_client_type in ['gateway', 'roaming'] and
+    - (ovpn_client_type in ['gateway', 'roaming', 'local'] and
        (openvpn_gateway_networks | default([]) | length > 0))
       or (ovpn_client_static_ip | default('') | trim | length > 0)
   template:
@@ -387,6 +414,7 @@
     client_type: "{{ ovpn_client.type | default('roaming') }}"
     client_prefer_vpn_dns: "{{ ovpn_client.prefer_vpn_dns | default(true) | bool }}"
     client_gateway_networks: "{{ ovpn_client.gateway_networks | default([]) }}"
+    client_local_ignore_networks: "{{ ovpn_client.local_ignore_networks | default([]) }}"
     client_local_dir: "{{ openvpn_client_local_dir }}"
     client_config_basename: "{{ openvpn_vpn_name }}_{{ client_name }}"
     client_local_config_file: "{{ client_local_dir }}/{{ client_config_basename }}.ovpn"
