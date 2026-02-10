@@ -30,6 +30,7 @@
     ovpn_client_name: "{{ client_name }}"
     ovpn_client_type: "{{ client_type | default('roaming') }}"
     ovpn_client_prefer_vpn_dns: "{{ client_prefer_vpn_dns | default(true) | bool }}"
+    ovpn_client_gateway_networks: "{{ client_gateway_networks | default([]) }}"
     ovpn_ca_content: "{{ ovpn_ca.content | b64decode }}"
     ovpn_ta_content: "{{ ovpn_ta.content | b64decode }}"
     ovpn_crt_content: "{{ ovpn_crt.content | b64decode }}"

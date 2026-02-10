@@ -9,10 +9,24 @@ nobind
 persist-key
 persist-tun
 
-{% if ovpn_client_type in ['gateway', 'local']
-      and (home_lan_network | default('') | trim | length > 0)
-      and (home_lan_netmask | default('') | trim | length > 0) %}
-pull-filter ignore "route {{ home_lan_network }} {{ home_lan_netmask }}"
+{% if ovpn_client_type == 'gateway' %}
+{% for gw_net in ovpn_client_gateway_networks | default([]) %}
+pull-filter ignore "route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}"
+{% endfor %}
+{% elif ovpn_client_type == 'local' %}
+{% set _pull_filter_networks = ovpn_client_gateway_networks | default([]) %}
+{% if _pull_filter_networks | length == 0 %}
+{% set _pull_filter_networks = openvpn_gateway_networks | default([]) %}
+{% endif %}
+{% for gw_net in _pull_filter_networks %}
+pull-filter ignore "route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}"
+{% endfor %}
+{% endif %}
+{% if ovpn_client_type == 'gateway' %}
+# This is a gateway-client, so it needs to ignore any redirect-gateway directives that the
+# server may push (these mean "full tunnel VPN"), since that would break connectivity for
+# the local network that the gateway is supposed to be providing access to.
+pull-filter ignore "redirect-gateway"
 {% endif %}
 
 remote-cert-tls server

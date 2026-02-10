@@ -2,7 +2,7 @@
 
 Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCDs, and exported inline `.ovpn` bundles on the controller. See the client role for how those exports are consumed and managed: [openvpn_client](../openvpn_client/README.md). The role assumes you want to:
 - Stand up a server (or several) with minimal defaults.
-- Onboard one or more gateway clients that may advertise a LAN behind them.
+- Onboard one or more gateway clients that may advertise LANs behind them.
 - Generate configs for roaming/local clients, including export-only clients that are not managed by Ansible.
 
 ## Variables
@@ -13,7 +13,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `network` / `netmask` (required): VPN subnet.
   - `port` (default: `1194`), `proto` (default: `udp`; valid options: `udp`, `tcp`), `dual_stack` (bool, default: `true`): when `true`, listeners use `udp6`/`tcp6` and clients get both `remote ... <proto>6` and `<proto>4`; when `false`, listeners use `udp4`/`tcp4` and clients get only `... <proto>4`.
   - `openvpn_remote_host` (string, required for clients): hostname/IP clients connect to (defaults to `server_hostname`).
-  - `home_lan_network`, `home_lan_netmask` (optional): advertise a LAN behind a gateway; if set, the role emits `route`/`iroute`/pull-filter bits as appropriate for client types.
+  - Gateway LAN routing is defined per gateway client via `gateway_networks` (see clients list below); the role emits `route`/`iroute`/pull-filter bits as appropriate for client types.
   - `openvpn_full_tunnel` (bool, default: `false`): push `redirect-gateway` to clients.
   - `openvpn_ca_passphrase` (required): passphrase to protect the CA key; no default.
   - `openvpn_mgmt_password` (required): password used to enable the management socket; the role writes a password file and adds a `management <bind> <port> <file>` line.
@@ -27,6 +27,9 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
     - `name` (required)
     - `type` (`gateway`|`roaming`|`local`, default `roaming`)
     - `static_ip` (optional, for CCD if set)
+    - `gateway_networks` (list, required for `gateway`): one or more networks advertised by this gateway. Each entry supports:
+      - `gateway_network_ip` (required)
+      - `gateway_network_netmask` (required)
     - `managed` (bool, default `true`; set `false` to export only and skip client role)
     - `dns_helper_script_override` (string, optional; default empty): absolute path to a DNS helper script on the client. When set, the client role uses this path directly and skips helper auto-discovery.
     - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
@@ -48,7 +51,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
 Protocol note: we default to `udp` with `dual_stack: true`, rendering `proto udp6` on the server so IPv4-mapped connects succeed when `net.ipv6.bindv6only=0` (this role enforces that sysctl). Set `dual_stack: false` to force IPv4-only sockets (`udp4`/`tcp4`).
 
 ### Client types
-- `gateway`: may serve a LAN behind it; CCD gets `iroute` for `home_lan_*`, and clients get LAN route guards/pull-filters accordingly. Gateway nodes also enable forwarding/rp_filter loosening in the client role.
+- `gateway`: may serve one or more LANs behind it; CCD gets `iroute` entries for `gateway_networks`, and clients get LAN route guards/pull-filters accordingly. Gateway nodes also enable forwarding/rp_filter loosening in the client role.
 - `roaming`: typical laptop/remote user; accepts pushed LAN routes and has no forwarding enabled.
 - `local`: meant to stay on the home LAN; receives pull-filter to ignore LAN routes (prevents hairpin), but otherwise acts like roaming. Good for export-only static devices.
 
@@ -64,8 +67,6 @@ openvpn_config:
     proto: udp
     dual_stack: true
     port: 1194
-    home_lan_network: 10.35.0.0
-    home_lan_netmask: 255.255.255.0
     openvpn_full_tunnel: true
     openvpn_remote_host: "vpn.example.com"
     openvpn_ca_passphrase: "changeme-ca"
@@ -79,7 +80,14 @@ openvpn_config:
     openvpn_dns_servers: [ "10.200.0.2", "1.1.1.1" ]
     openvpn_dns_domain: [ "~example.com", "~internal.lan" ]
     clients:
-      - { name: homegateway, type: gateway, static_ip: 10.200.0.10 }
+      - name: homegateway
+        type: gateway
+        static_ip: 10.200.0.10
+        gateway_networks:
+          - gateway_network_ip: 10.41.0.0
+            gateway_network_netmask: 255.255.255.0
+          - gateway_network_ip: 10.42.0.0
+            gateway_network_netmask: 255.255.255.0
       - { name: laptop1, type: roaming }
       - { name: laptop2, type: roaming }
       - { name: phone1, type: local, managed: false }  # export-only

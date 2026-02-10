@@ -3,6 +3,8 @@
   set_fact:
     openvpn_vpn_name: "{{ ovpn_server.vpn_name | default(ovpn_server.name) }}"
     openvpn_client_name: "{{ openvpn_client_name | default(inventory_hostname) }}"
+    openvpn_full_tunnel: >-
+      {{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel | default(false)) }}
 
 - name: Derive local artifact paths
   set_fact:

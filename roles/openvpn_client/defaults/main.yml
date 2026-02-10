@@ -5,6 +5,9 @@ openvpn_client_name: "{{ inventory_hostname }}"
 # VPN definitions and their clients (shared with server role)
 openvpn_config: []
 
+# Mirror server default to avoid undefined in client role.
+openvpn_default_full_tunnel: false
+
 # Local controller path for exported artifacts
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 

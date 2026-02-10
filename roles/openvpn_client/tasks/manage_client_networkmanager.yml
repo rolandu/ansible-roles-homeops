@@ -89,9 +89,20 @@
   register: openvpn_client_nm_import
   changed_when: openvpn_client_nm_import.rc == 0
 
+- name: Refresh NetworkManager connection presence after import
+  command: nmcli -t -f NAME connection show
+  register: openvpn_client_nm_connections_post
+  changed_when: false
+
+- name: Assert NetworkManager connection exists after import
+  assert:
+    that:
+      - openvpn_client_connection_name in openvpn_client_nm_connections_post.stdout_lines
+    fail_msg: >-
+      NetworkManager connection {{ openvpn_client_connection_name }} is missing after import.
+
 # make sure networkmanager keeps the connection alive
 - name: Ensure NetworkManager base connection settings
-  when: openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
   command: >-
     nmcli connection modify "{{ openvpn_client_connection_name }}"
     vpn.timeout 30
@@ -101,9 +112,28 @@
     +vpn.data "ping-restart=60"
   changed_when: false
 
+# networkmanager has a strange behavior: it sets the default route through
+# the VPN connection even for split-tunnel configs, even if the VPN doesn't
+# push a default route. To work around this, we need to explicitly tell 
+# NetworkManager not set a default route for split-tunnel configs.
+#
+# In addition, gateway clients must never set a default route through the VPN, 
+# even if the server pushes one, since that would break connectivity for the
+# local network that the gateway is supposed to be providing access to.
+- name: Disable VPN default route for split-tunnel configs
+  when:
+    - not (openvpn_full_tunnel | default(false) | bool) or ((openvpn_client_role | default('') | lower) == 'gateway')
+  command: >-
+    nmcli connection modify "{{ openvpn_client_connection_name }}"
+    ipv4.never-default yes
+    ipv6.never-default yes
+  changed_when: false
+
+# If we configured the VPN to prefer the DNS server that was provided by the
+# VPN, we need to set the DNS priority to ensure that it is preferred over any
+# other DNS servers that may be configured on the system.
 - name: Prefer VPN DNS in NetworkManager connection
   when:
-    - openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
     - openvpn_client_prefer_vpn_dns | default(true) | bool
   command: >-
     nmcli connection modify "{{ openvpn_client_connection_name }}"
@@ -113,7 +143,6 @@
 
 - name: Force VPN DNS routing domains in NetworkManager connection
   when:
-    - openvpn_client_nm_connection_exists | bool or (openvpn_client_nm_import is defined and openvpn_client_nm_import is changed)
     - openvpn_client_prefer_vpn_dns | default(true) | bool
     - openvpn_dns_servers | length > 0
   command: >-
@@ -122,13 +151,12 @@
     ipv6.dns-search "{{ openvpn_dns_domains_search | join(',') }}"
   changed_when: false
 
-- name: List active NetworkManager connections
-  command: nmcli -t -f NAME connection show --active
-  register: openvpn_client_nm_active
+- name: Bring down NetworkManager connection before restart
+  command: nmcli connection down "{{ openvpn_client_connection_name }}"
+  failed_when: false
   changed_when: false
 
 - name: Bring up NetworkManager connection
-  when: openvpn_client_connection_name not in openvpn_client_nm_active.stdout_lines
   command: nmcli connection up "{{ openvpn_client_connection_name }}"
   register: openvpn_client_nm_up
   changed_when: openvpn_client_nm_up.rc == 0

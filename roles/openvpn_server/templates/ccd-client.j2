@@ -2,12 +2,12 @@
 ifconfig-push {{ ovpn_client_static_ip }} {{ openvpn_netmask }}
 {% endif -%}
 
-{% if ovpn_client_type == 'gateway'
-   and (home_lan_network | default('') | trim | length > 0)
-   and (home_lan_netmask | default('') | trim | length > 0) -%}
-iroute {{ home_lan_network }} {{ home_lan_netmask }}
-{% elif ovpn_client_type == 'roaming'
-   and (home_lan_network | default('') | trim | length > 0)
-   and (home_lan_netmask | default('') | trim | length > 0) -%}
-push "route {{ home_lan_network }} {{ home_lan_netmask }}"
+{% if ovpn_client_type == 'gateway' -%}
+{% for gw_net in ovpn_client_gateway_networks | default([]) -%}
+iroute {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}
+{% endfor -%}
+{% elif ovpn_client_type == 'roaming' -%}
+{% for gw_net in openvpn_gateway_networks | default([]) -%}
+push "route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}"
+{% endfor -%}
 {% endif %}

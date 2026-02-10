@@ -11,8 +11,6 @@
     openvpn_port: "{{ ovpn_server.port | default(openvpn_default_port) }}"
     openvpn_proto_base: "{{ (ovpn_server.proto | default(openvpn_default_proto)) | lower }}"
     openvpn_dual_stack: "{{ ovpn_server.dual_stack | default(openvpn_default_dual_stack) }}"
-    home_lan_network: "{{ ovpn_server.home_lan_network | default('') }}"
-    home_lan_netmask: "{{ ovpn_server.home_lan_netmask | default('') }}"
     openvpn_full_tunnel: "{{ ovpn_server.openvpn_full_tunnel | default(openvpn_default_full_tunnel) }}"
     openvpn_remote_host: "{{ ovpn_server.openvpn_remote_host | default(openvpn_server_hostname | default(ansible_host | default(inventory_hostname))) }}"
     openvpn_client_export_dir: "{{ ovpn_server.openvpn_client_export_dir | default(openvpn_default_client_export_dir) }}"
@@ -30,6 +28,45 @@
     openvpn_mgmt_password: "{{ ovpn_server.openvpn_mgmt_password }}"
     openvpn_mgmt_port: "{{ ovpn_server.openvpn_mgmt_port | default(openvpn_default_mgmt_port) }}"
     openvpn_mgmt_bind: "{{ ovpn_server.openvpn_mgmt_bind | default(openvpn_default_mgmt_bind) }}"
+
+- name: Build gateway network list ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_gateway_networks: >-
+      {{
+        openvpn_clients
+        | selectattr('type', 'equalto', 'gateway')
+        | map(attribute='gateway_networks')
+        | select('defined')
+        | list
+        | flatten
+      }}
+
+- name: Validate gateway clients define networks ({{ openvpn_vpn_name }})
+  assert:
+    that:
+      - (ovpn_client.gateway_networks | default([]) | length) > 0
+      - (ovpn_client.gateway_networks | default([])) | type_debug == 'list'
+    fail_msg: "Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_networks with at least one entry."
+  loop: "{{ openvpn_clients | selectattr('type', 'equalto', 'gateway') | list }}"
+  loop_control:
+    loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
+
+- name: Validate gateway network entries ({{ openvpn_vpn_name }})
+  assert:
+    that:
+      - ovpn_gateway_network.gateway_network_ip is defined
+      - ovpn_gateway_network.gateway_network_ip | string | trim | length > 0
+      - ovpn_gateway_network.gateway_network_netmask is defined
+      - ovpn_gateway_network.gateway_network_netmask | string | trim | length > 0
+    fail_msg: "Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_network_ip and gateway_network_netmask for each gateway_networks entry."
+  vars:
+    ovpn_client: "{{ ovpn_gateway_pair.0 }}"
+    ovpn_gateway_network: "{{ ovpn_gateway_pair.1 }}"
+  loop: "{{ (openvpn_clients | selectattr('type', 'equalto', 'gateway') | list) | subelements('gateway_networks', skip_missing=True) }}"
+  loop_control:
+    loop_var: ovpn_gateway_pair
+    label: "{{ ovpn_gateway_pair.0.name | default('unnamed') }} -> {{ ovpn_gateway_pair.1.gateway_network_ip | default('undefined') }}"
 
 - name: Set protocol-derived facts ({{ openvpn_vpn_name }})
   set_fact:
@@ -298,10 +335,10 @@
     ovpn_client_name: "{{ ovpn_client.name }}"
     ovpn_client_type: "{{ ovpn_client.type | default('roaming') }}"
     ovpn_client_static_ip: "{{ ovpn_client.static_ip | default('') }}"
+    ovpn_client_gateway_networks: "{{ ovpn_client.gateway_networks | default([]) }}"
   when:
-    - (home_lan_network | default('') | trim | length > 0 and
-       home_lan_netmask | default('') | trim | length > 0 and
-       ovpn_client_type in ['gateway', 'roaming'])
+    - (ovpn_client_type in ['gateway', 'roaming'] and
+       (openvpn_gateway_networks | default([]) | length > 0))
       or (ovpn_client_static_ip | default('') | trim | length > 0)
   template:
     src: "ccd-client.j2"
@@ -349,6 +386,7 @@
     client_name: "{{ ovpn_client.name }}"
     client_type: "{{ ovpn_client.type | default('roaming') }}"
     client_prefer_vpn_dns: "{{ ovpn_client.prefer_vpn_dns | default(true) | bool }}"
+    client_gateway_networks: "{{ ovpn_client.gateway_networks | default([]) }}"
     client_local_dir: "{{ openvpn_client_local_dir }}"
     client_config_basename: "{{ openvpn_vpn_name }}_{{ client_name }}"
     client_local_config_file: "{{ client_local_dir }}/{{ client_config_basename }}.ovpn"
