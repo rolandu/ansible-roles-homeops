@@ -11,7 +11,7 @@ persist-tun
 
 {% if ovpn_client_type == 'gateway' %}
 {% for gw_net in ovpn_client_gateway_networks | default([]) %}
-# This is the gateway client for {{ gw.net.gateway_network_ip }}, so it needs to ignore
+# This is the gateway client for {{ gw_net.gateway_network_ip }}, so it needs to ignore
 # any route directives that the server may push for that network, since those would
 # break connectivity for the local network that the gateway is supposed to be providing access to.
 pull-filter ignore "route {{ gw_net.gateway_network_ip }} {{ gw_net.gateway_network_netmask }}"
