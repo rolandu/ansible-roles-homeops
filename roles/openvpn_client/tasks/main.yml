@@ -7,7 +7,7 @@
     fail_msg: "Set openvpn_config to the list of VPN definitions."
 
 - name: Configure OpenVPN client per VPN
-  include_tasks: configure_server.yml
+  include_tasks: configure_for_every_network.yml
   loop: "{{ openvpn_config }}"
   loop_control:
     loop_var: ovpn_server

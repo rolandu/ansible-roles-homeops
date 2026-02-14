@@ -1,18 +1,9 @@
 ---
+# These tasks are run per client per server configured
+
 - name: Set connection name for client
   set_fact:
     openvpn_client_connection_name: "{{ openvpn_vpn_name }}_{{ openvpn_client_name }}"
-
-- name: Set client config directory
-  set_fact:
-    openvpn_client_conf_dir: "/etc/openvpn/client"
-
-- name: Ensure client config directory exists
-  file:
-    path: "{{ openvpn_client_conf_dir }}"
-    state: directory
-    mode: "0755"
-  notify: Restart OpenVPN client service
 
 - name: Validate local .ovpn artifact exists on controller
   delegate_to: localhost
@@ -21,6 +12,13 @@
     path: "{{ openvpn_client_local_config_file }}"
   register: openvpn_client_local_config_stat
   failed_when: not openvpn_client_local_config_stat.stat.exists
+
+- name: Ensure client config directory exists
+  file:
+    path: "{{ openvpn_client_conf_dir }}"
+    state: directory
+    mode: "0755"
+  notify: Restart OpenVPN client service
 
 - name: Copy inline .ovpn from controller to target as .conf
   copy:

@@ -4,10 +4,10 @@
     src: "{{ easyrsa_dir }}/pki/ca.crt"
   register: ovpn_ca
 
-- name: Slurp TLS auth key ({{ openvpn_vpn_name }} - {{ client_name }})
+- name: Slurp TLS crypt key ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
     src: "{{ easyrsa_dir }}/ta.key"
-  register: ovpn_ta
+  register: ovpn_tls_crypt
 
 - name: Slurp client certificate ({{ openvpn_vpn_name }} - {{ client_name }})
   slurp:
@@ -33,6 +33,6 @@
     ovpn_client_gateway_networks: "{{ client_gateway_networks | default([]) }}"
     ovpn_client_local_ignore_networks: "{{ client_local_ignore_networks | default([]) }}"
     ovpn_ca_content: "{{ ovpn_ca.content | b64decode }}"
-    ovpn_ta_content: "{{ ovpn_ta.content | b64decode }}"
+    ovpn_tls_crypt_content: "{{ ovpn_tls_crypt.content | b64decode }}"
     ovpn_crt_content: "{{ ovpn_crt.content | b64decode }}"
     ovpn_key_content: "{{ ovpn_key.content | b64decode }}"

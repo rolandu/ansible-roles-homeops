@@ -1,4 +1,8 @@
 ---
+# These tasks are run per client per server configured
+#
+# ovpn_server is the loop_var for the current server definition from openvpn_config
+
 - name: Set per-server facts
   set_fact:
     openvpn_vpn_name: "{{ ovpn_server.vpn_name | default(ovpn_server.name) }}"

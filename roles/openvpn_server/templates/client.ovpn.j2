@@ -1,8 +1,6 @@
 client
 dev tun
-{% for remote_proto in openvpn_remote_protos %}
-remote {{ openvpn_remote_host }} {{ openvpn_port }} {{ remote_proto }}
-{% endfor %}
+remote {{ openvpn_remote_host }} {{ openvpn_port }} {{ openvpn_client_proto }}
 resolv-retry infinite
 nobind
 
@@ -30,7 +28,6 @@ pull-filter ignore "route {{ local_net.gateway_network_ip }} {{ local_net.gatewa
 {% endif %}
 
 remote-cert-tls server
-key-direction 1
 
 verb 3
 
@@ -46,6 +43,6 @@ verb 3
 {{ ovpn_key_content }}
 </key>
 
-<tls-auth>
-{{ ovpn_ta_content }}
-</tls-auth>
+<tls-crypt>
+{{ ovpn_tls_crypt_content }}
+</tls-crypt>

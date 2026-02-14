@@ -126,6 +126,7 @@
 - name: Set derived paths ({{ openvpn_vpn_name }})
   set_fact:
     openvpn_mgmt_password_file: "{{ openvpn_server_dir }}/{{ openvpn_vpn_name }}.mgmtpass"
+    openvpn_crl_file: "{{ openvpn_server_dir }}/crl.pem"
 
 - name: Ensure OpenVPN group exists ({{ openvpn_vpn_name }})
   group:
@@ -196,11 +197,87 @@
         chdir: "{{ easyrsa_dir }}"
         creates: "{{ easyrsa_dir }}/pki/dh.pem"
 
-    - name: Generate TLS auth key ({{ openvpn_vpn_name }})
+    - name: Generate TLS crypt key ({{ openvpn_vpn_name }})
       command: openvpn --genkey --secret ta.key
       args:
         chdir: "{{ easyrsa_dir }}"
         creates: "{{ easyrsa_dir }}/ta.key"
+  notify: Restart OpenVPN server instance
+
+- name: Stat EasyRSA index ({{ openvpn_vpn_name }})
+  stat:
+    path: "{{ easyrsa_dir }}/pki/index.txt"
+  register: openvpn_index_stat
+
+- name: Stat EasyRSA CRL ({{ openvpn_vpn_name }})
+  stat:
+    path: "{{ easyrsa_dir }}/pki/crl.pem"
+  register: openvpn_crl_stat
+
+- name: Default revoked CN list ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_revoked_cns: []
+
+- name: Slurp EasyRSA index ({{ openvpn_vpn_name }})
+  slurp:
+    src: "{{ easyrsa_dir }}/pki/index.txt"
+  when: openvpn_index_stat.stat.exists
+  register: openvpn_index
+
+- name: Build revoked CN list ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_revoked_cns: >-
+      {{
+        (openvpn_index.content | b64decode).splitlines()
+        | select('match', '^R')
+        | map('regex_replace', '^.*\\/CN=', '')
+        | list
+      }}
+  when: openvpn_index_stat.stat.exists
+
+- name: Stat client certs flagged for revocation ({{ openvpn_vpn_name }})
+  stat:
+    path: "{{ easyrsa_dir }}/pki/issued/{{ ovpn_client.name }}.crt"
+  loop: "{{ openvpn_clients | selectattr('revoke', 'defined') | selectattr('revoke') | list }}"
+  loop_control:
+    loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
+  register: openvpn_revoke_cert_stats
+
+- name: Revoke client certificates ({{ openvpn_vpn_name }})
+  command: ./easyrsa --batch revoke {{ item.item.name }}
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  environment: "{{ openvpn_ca_sign_env }}"
+  loop: "{{ openvpn_revoke_cert_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('unnamed') }}"
+  when:
+    - item.stat.exists
+    - item.item.name is defined
+    - item.item.name not in openvpn_revoked_cns
+  register: openvpn_revoke_results
+  notify: Restart OpenVPN server instance
+
+- name: Flag CRL update when revocations occur ({{ openvpn_vpn_name }})
+  set_fact:
+    openvpn_revoke_changed: "{{ (openvpn_revoke_results.results | default([]) | selectattr('changed') | list | length) > 0 }}"
+  when: openvpn_revoke_results is defined
+
+- name: Generate CRL if index is newer ({{ openvpn_vpn_name }})
+  command: ./easyrsa gen-crl
+  args:
+    chdir: "{{ easyrsa_dir }}"
+  environment: "{{ openvpn_ca_sign_env }}"
+  when: >
+    not openvpn_crl_stat.stat.exists
+    or (
+      openvpn_index_stat.stat.exists
+      and openvpn_index_stat.stat.mtime is defined
+      and openvpn_crl_stat.stat.mtime is defined
+      and openvpn_index_stat.stat.mtime > openvpn_crl_stat.stat.mtime
+    )
+    or (openvpn_revoke_changed | default(false))
   notify: Restart OpenVPN server instance
 
 - name: Ensure OpenVPN server directory exists ({{ openvpn_vpn_name }})
@@ -246,6 +323,7 @@
     - { src: "{{ easyrsa_dir }}/pki/private/{{ openvpn_vpn_name }}.key", dest: "server.key" }
     - { src: "{{ easyrsa_dir }}/pki/dh.pem", dest: "dh.pem" }
     - { src: "{{ easyrsa_dir }}/ta.key", dest: "ta.key" }
+    - { src: "{{ easyrsa_dir }}/pki/crl.pem", dest: "crl.pem" }
   notify: Restart OpenVPN server instance
 
 - name: Deploy OpenVPN server configuration ({{ openvpn_vpn_name }})

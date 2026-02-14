@@ -13,8 +13,10 @@ ca ca.crt
 cert server.crt
 key server.key
 dh dh.pem
-# todo: change to tls-crypt and drop the zero (also for the clients)
-tls-auth ta.key 0
+tls-crypt ta.key
+verify-client-cert require
+remote-cert-tls client
+crl-verify {{ openvpn_crl_file }}
 
 # modern tls versions
 tls-version-min 1.2

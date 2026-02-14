@@ -3,6 +3,14 @@
 - name: Gather service facts
   service_facts:
 
+- name: Gather package facts
+  package_facts:
+    manager: auto
+
+- name: Check if NetworkManager OpenVPN plugin is installed
+  set_fact:
+    openvpn_client_nm_plugin_installed: "{{ 'network-manager-openvpn' in ansible_facts.packages }}"
+
 - name: Assert NetworkManager is running
   assert:
     that:
@@ -30,6 +38,7 @@
     name: network-manager-openvpn
     state: present
     update_cache: yes
+  when: not openvpn_client_nm_plugin_installed | bool
   register: openvpn_client_nm_plugin
 
 - name: Reload NetworkManager after plugin install

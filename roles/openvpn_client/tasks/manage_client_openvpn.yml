@@ -1,9 +1,18 @@
 ---
+- name: Gather package facts
+  package_facts:
+    manager: auto
+
+- name: Check if OpenVPN client package is installed
+  set_fact:
+    openvpn_client_package_installed: "{{ 'openvpn' in ansible_facts.packages }}"
+
 - name: Install OpenVPN client package
   apt:
     name: openvpn
     state: present
     update_cache: yes
+  when: not openvpn_client_package_installed | bool
   register: openvpn_client_package
   notify: Restart OpenVPN client service
 
@@ -51,11 +60,15 @@
           but does not exist.
 
 - name: Ensure systemd-resolved helper package is present if DNS handler is systemd-resolved
-  when: openvpn_client_dns_handler == 'systemd-resolved'
+  vars:
+    openvpn_client_resolved_installed: "{{ 'openvpn-systemd-resolved' in ansible_facts.packages }}"
   apt:
     name: openvpn-systemd-resolved
     state: present
     update_cache: yes
+  when:
+    - openvpn_client_dns_handler == 'systemd-resolved'
+    - not openvpn_client_resolved_installed | bool
   register: openvpn_client_resolved_package
   notify: Restart OpenVPN client service
 

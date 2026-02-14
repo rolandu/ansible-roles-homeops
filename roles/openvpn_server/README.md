@@ -32,6 +32,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
       - `gateway_network_netmask` (required)
     - `local_ignore_networks` (list, optional; for `local`): networks to ignore when the server pushes LAN routes. Entries use the same schema as `gateway_networks`.
     - `managed` (bool, default `true`; set `false` to export only and skip client role)
+    - `revoke` (bool, default `false`): when `true`, revoke the client certificate (if it exists) and refresh the CRL.
     - `dns_helper_script_override` (string, optional; default empty): absolute path to a DNS helper script on the client. When set, the client role uses this path directly and skips helper auto-discovery.
     - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
 - `openvpn_default_*` variables control defaults applied when the fields above are omitted:
@@ -52,9 +53,10 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
 Protocol note: we default to `udp` with `dual_stack: true`, rendering `proto udp6` on the server so IPv4-mapped connects succeed when `net.ipv6.bindv6only=0` (this role enforces that sysctl). Set `dual_stack: false` to force IPv4-only sockets (`udp4`/`tcp4`).
 
 ### Client types
+
 - `gateway`: may serve one or more LANs behind it; CCD gets `iroute` entries for `gateway_networks`, and clients get LAN route guards/pull-filters accordingly. Gateway nodes also enable forwarding/rp_filter loosening in the client role.
-- `roaming`: typical laptop/remote user; accepts pushed LAN routes and has no forwarding enabled.
-- `local`: meant to stay on a certain LAN; receives pull-filter to ignore selected LAN routes (prevents hairpin) via `local_ignore_networks`, but otherwise acts like roaming. Good for export-only static devices, like local servers.
+- `roaming`: typical laptop/remote/server; accepts pushed LAN routes and has no forwarding enabled.
+- `local`: meant to stay on a certain LAN; receives pull-filter to ignore selected LAN routes (prevents hairpin) via `local_ignore_networks`, but otherwise acts like roaming. Good for export-only static devices, like local servers, that are in the same network as a gateway.
 
 ## Example vars
 
@@ -110,9 +112,23 @@ openvpn_config:
 
 The role installs OpenVPN + EasyRSA, builds CA/server/client certs, writes `openvpn-server@<vpn_name>` configs under `openvpn_server_dir`, enforces forwarding/rp_filter sysctls, renders CCD files, and exports inline client bundles to the controller under `openvpn_client_local_dir_base/<vpn_name>/<vpn_name>_<client>.ovpn`.
 
-- A dedicated system user/group `openvpn` is created; the service runs as that user and owns runtime assets (configs, server keys, CCDs, export dir). "Other" has no access to these paths.
+A dedicated system user/group `openvpn` is created; the service runs as that user and owns runtime assets (configs, server keys, CCDs, export dir). "Other" has no access to these paths.
 
-- Static IP guidance: place CCD/static addresses well outside your expected dynamic pool (e.g., `... .200` upward if you have only a handful of dynamic clients). OpenVPN does not reserve static ranges automatically, so avoid overlaps manually.
+**Static IP guidance**: place CCD/static addresses well outside your expected dynamic pool (e.g., `... .200` upward if you have only a handful of dynamic clients). OpenVPN does not reserve static ranges automatically, so avoid overlaps manually.
+
+## Security defaults
+- `tls-crypt` with a per-VPN key (`ta.key`)
+- Require client certs (`verify-client-cert require`)
+- Enforce cert type checks (`remote-cert-tls client` / `remote-cert-tls server`)
+- Enable CRL validation (`crl-verify <openvpn_server_dir>/crl.pem`; CRL generated when missing or when the EasyRSA index changes)
+- No password auth (no `auth-user-pass`)
+- Use client certs (`<ca>`, `<cert>`, `<key>`)
+- No static key mode (no `secret` directive)
+- Modern cipher suites (`data-ciphers`/`data-ciphers-fallback`)
+- Compression disabled (`allow-compression no`)
+- Modern TLS 1.2 minimum (`tls-version-min 1.2`)
+- Management interface only accessible locally (`127.0.0.1` default when enabled)
+- UDP by default (configurable)
 
 ## Running multiple servers on the same host
 Set unique values per VPN to avoid collisions:
