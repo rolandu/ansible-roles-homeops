@@ -19,8 +19,8 @@
 #   # Request A SINGLE NAME per run (e.g., only example.com OR only *.example.com)
 #   sudo -E certbot certonly \
 #     --manual --preferred-challenges dns \
-#     --manual-auth-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ auth \
-#     --manual-cleanup-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ cleanup \
+#     --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
+#     --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
 #     -d example.com                         # run again in a separate command for *.example.com
 
 set -euo pipefail
@@ -55,10 +55,18 @@ fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+# log:
+# Print informational messages to stdout (prevents Certbot stderr warnings).
 log() { printf '%s
-' "$@"; }          # info -> stdout (so Certbot won't say "error output")
+' "$@"; }
+
+# err:
+# Print error messages to stderr.
 err() { printf '%s
-' "$@" >&2; }        # errors -> stderr
+' "$@" >&2; }
+
+# fail:
+# Print a formatted error and exit with failure.
 fail() { err "ERROR: $*"; exit 1; }
 
 command -v hcloud >/dev/null 2>&1 || fail "hcloud CLI not found"
@@ -70,6 +78,8 @@ command -v jq >/dev/null 2>&1 || fail "jq not found"
 # GRACE defaults to TTL seconds; override with GRACE_SECONDS env var.
 GRACE="${GRACE_SECONDS:-$TTL}"
 
+# grace_wait:
+# Sleep for a configurable grace period so recursive caches can expire.
 grace_wait() {
   # Wait for GRACE seconds, printing progress every 10s (or final shorter chunk)
   local total="${1:-$GRACE}"
@@ -87,14 +97,20 @@ grace_wait() {
   log "[grace] Done."
 }
 
+# records_one_token:
+# Build records JSON with exactly one TXT token value.
 records_one_token() {
   jq -cn --arg v "$QV" '[{"value":$v, "comment":"added by certbot"}]'
 }
 
+# records_empty:
+# Build records JSON that deletes the RRSet (empty array).
 records_empty() {
   echo '[]'
 }
 
+# apply_records:
+# Validate and apply the desired RRSet JSON to Hetzner DNS.
 apply_records() {
   local json="$1"
   printf '%s' "$json" >"${TMP_DIR}/records.json"
@@ -105,12 +121,22 @@ apply_records() {
   if [[ ! -s "${TMP_DIR}/records.json" ]]; then
     fail "records.json is empty"
   fi
+  # Emit the outgoing payload for traceability.
   log "[apply] set-records ${HCLOUD_ZONE} ${RR_NAME} TXT with: $(cat "${TMP_DIR}/records.json")"
-  hcloud "${HCLOUD_FLAGS[@]}" zone rrset set-records \
-    --records-file "${TMP_DIR}/records.json" \
-    "$HCLOUD_ZONE" "$RR_NAME" TXT >/dev/null
+  # In normal mode silence hcloud stderr chatter so Certbot does not flag false hook errors.
+  if [[ "${DEBUG:-0}" == "1" ]]; then
+    hcloud "${HCLOUD_FLAGS[@]}" zone rrset set-records \
+      --records-file "${TMP_DIR}/records.json" \
+      "$HCLOUD_ZONE" "$RR_NAME" TXT
+  else
+    hcloud "${HCLOUD_FLAGS[@]}" zone rrset set-records \
+      --records-file "${TMP_DIR}/records.json" \
+      "$HCLOUD_ZONE" "$RR_NAME" TXT >/dev/null 2>&1
+  fi
 }
 
+# maybe_create_with_ttl:
+# Attempt RRSet create first so TTL is set when record does not already exist.
 maybe_create_with_ttl() {
   local json="$1"
   printf '%s' "$json" >"${TMP_DIR}/records.json"
@@ -124,6 +150,8 @@ maybe_create_with_ttl() {
     "$HCLOUD_ZONE" >/dev/null 2>&1 || true
 }
 
+# wait_for_dns:
+# Poll resolvers until TXT token is visible (or timeout) after auth step.
 wait_for_dns() {
   command -v dig >/dev/null 2>&1 || { log "[wait] dig not found; skipping"; return 0; }
   local interval=10           # seconds between checks
@@ -174,6 +202,8 @@ wait_for_dns() {
 }
 
 
+# wait_until_absent:
+# Poll resolvers until TXT token is absent (or timeout) after cleanup step.
 wait_until_absent() {
   command -v dig >/dev/null 2>&1 || { log "[wait] dig not found; skipping"; return 0; }
   local interval=10
@@ -220,6 +250,7 @@ wait_until_absent() {
 # ---- Subcommands ------------------------------------------------------------
 case "$SUBCMD" in
   auth)
+    # 1) Build one-token payload, 2) apply RRSet, 3) wait for propagation.
     log "[auth] zone=${HCLOUD_ZONE} fqdn=${FQDN} ttl=${TTL}"
     log "[auth] quoted token=${QV}"
 
@@ -230,6 +261,7 @@ case "$SUBCMD" in
     ;;
 
   cleanup)
+    # 1) Build empty payload, 2) apply RRSet deletion, 3) wait for disappearance.
     log "[cleanup] zone=${HCLOUD_ZONE} fqdn=${FQDN} removing token=${QV}"
 
     empty="$(records_empty)"
@@ -250,13 +282,13 @@ IMPORTANT:
   • Example:
       # 1) apex
       sudo -E certbot certonly --manual --preferred-challenges dns \
-        --manual-auth-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ auth \
-        --manual-cleanup-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ cleanup \
+        --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
+        --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
         -d example.com
       # 2) wildcard (separate command)
       sudo -E certbot certonly --manual --preferred-challenges dns \
-        --manual-auth-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ auth \
-        --manual-cleanup-hook /etc/letsencrypt/hooks/hetzner/certbot-hcloud.sh\ cleanup \
+        --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
+        --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
         -d '*.example.com'
 
 Environment:
@@ -274,4 +306,3 @@ USAGE
     ;;
 
 esac
-

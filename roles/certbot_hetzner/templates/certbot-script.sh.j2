@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+export HCLOUD_ZONE={{ hcloud_zone | quote }}
+export HCLOUD_TOKEN={{ hcloud_token | quote }}
+export HCLOUD_TTL={{ hcloud_ttl | quote }}
+export GRACE_SECONDS={{ grace_seconds | quote }}
+
+export CERTBOT_EMAIL={{ certbot_email | quote }}
+export CERTBOT_AUTH_HOOK_PATH={{ certbot_auth_hook_path | quote }}
+export CERTBOT_CONFIG_DIR={{ certbot_config_dir | quote }}
+export CERTBOT_WORK_DIR={{ certbot_work_dir | quote }}
+export CERTBOT_LOGS_DIR={{ certbot_logs_dir | quote }}
+export CERTBOT_SHARED_GROUP={{ certbot_shared_group | quote }}
+export CERTBOT_DIR_MODE={{ certbot_dir_mode | quote }}
+export CERTBOT_FILE_MODE={{ certbot_file_mode | quote }}
+export CERTBOT_LINEAGE_COUNT={{ certbot_lineages | length }}
+
+# export DEBUG=1   # optional
+# export DRYRUN=1  # optional - certbot dryrun, no certs issued
+
+# require_setting:
+# Fail fast when a required runtime setting is empty or unset.
+require_setting() {
+  local name="${1:?missing env var name}"
+  if [[ -z "${!name:-}" ]]; then
+    echo "ERROR: required setting '$name' is empty or unset" >&2
+    exit 1
+  fi
+}
+
+# ensure_tree_permissions:
+# Enforce root:<shared_group> ownership and configured modes recursively.
+ensure_tree_permissions() {
+  local path="${1:?missing path}"
+  [[ -d "$path" ]] || return 0
+
+  # Keep ownership and mode consistent after certbot writes new artifacts.
+  chown -R "root:$CERTBOT_SHARED_GROUP" "$path"
+  find "$path" -type d -exec chmod "$CERTBOT_DIR_MODE" {} +
+  find "$path" -type f -exec chmod "$CERTBOT_FILE_MODE" {} +
+}
+
+# validate_runtime_settings:
+# Validate required env/settings and prepare certbot directories before issuance.
+validate_runtime_settings() {
+  local required=(
+    HCLOUD_ZONE
+    HCLOUD_TOKEN
+    HCLOUD_TTL
+    GRACE_SECONDS
+    CERTBOT_EMAIL
+    CERTBOT_AUTH_HOOK_PATH
+    CERTBOT_CONFIG_DIR
+    CERTBOT_WORK_DIR
+    CERTBOT_LOGS_DIR
+    CERTBOT_SHARED_GROUP
+    CERTBOT_DIR_MODE
+    CERTBOT_FILE_MODE
+  )
+
+  # Verify that all required settings are present.
+  local key
+  for key in "${required[@]}"; do
+    require_setting "$key"
+  done
+
+  # Ensure at least one lineage is configured in the rendered template.
+  if (( CERTBOT_LINEAGE_COUNT < 1 )); then
+    echo "ERROR: certbot_lineages must contain at least one item" >&2
+    exit 1
+  fi
+
+  # Check required binaries and hook executability up front.
+  command -v certbot >/dev/null 2>&1 || {
+    echo "ERROR: certbot binary not found in PATH" >&2
+    exit 1
+  }
+
+  [[ -x "$CERTBOT_AUTH_HOOK_PATH" ]] || {
+    echo "ERROR: auth hook is missing or not executable: $CERTBOT_AUTH_HOOK_PATH" >&2
+    exit 1
+  }
+
+  # Create certbot paths and normalize access model before issuing certs.
+  mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
+  ensure_tree_permissions "$CERTBOT_CONFIG_DIR"
+  ensure_tree_permissions "$CERTBOT_WORK_DIR"
+  ensure_tree_permissions "$CERTBOT_LOGS_DIR"
+}
+
+# makecert:
+# Issue/renew a single lineage via DNS-01 manual hooks.
+makecert() {
+  local domain="${1:?Usage: makecert <domain> <cert-name>}"
+  local certname="${2:?Usage: makecert <domain> <cert-name>}"
+
+  # Build optional dry-run flag list.
+  local maybe_dry=()
+  [[ "${DRYRUN:-0}" == "1" ]] && maybe_dry+=(--dry-run)
+
+  echo "Attempting to make/renew cert for $domain (lineage: $certname) using $CERTBOT_EMAIL"
+
+  # Run certbot with explicit config/work/log directories and Hetzner hooks.
+  certbot certonly \
+    --config-dir "$CERTBOT_CONFIG_DIR" \
+    --work-dir "$CERTBOT_WORK_DIR" \
+    --logs-dir "$CERTBOT_LOGS_DIR" \
+    --keep-until-expiring \
+    --manual --preferred-challenges dns \
+    --manual-auth-hook "$CERTBOT_AUTH_HOOK_PATH auth" \
+    --manual-cleanup-hook "$CERTBOT_AUTH_HOOK_PATH cleanup" \
+    --cert-name "$certname" \
+    --email "$CERTBOT_EMAIL" --agree-tos --no-eff-email --non-interactive \
+    "${maybe_dry[@]}" \
+    -d "$domain"
+
+  # Certbot creates/updates files; enforce target ownership/modes afterwards.
+  ensure_tree_permissions "$CERTBOT_CONFIG_DIR"
+
+  echo
+  echo "--------------------------------------------------------------------"
+  echo
+}
+
+# Validate all runtime preconditions once before processing lineages.
+validate_runtime_settings
+
+# Iterate configured lineages sequentially
+{% for item in certbot_lineages %}
+makecert {{ item.domain | quote }} {{ item.certname | quote }}
+{% endfor %}

@@ -1,0 +1,39 @@
+---
+app_root_dir: "/opt"
+data_root_dir: "/srv"
+
+# Installation mode
+use_venv: false
+certbot_venv_path: "{{ app_root_dir }}/certbot/venv"
+install_certbot_nginx: false
+
+# hcloud CLI installation
+hcloud_download_url: https://github.com/hetznercloud/cli/releases/latest/download/hcloud-linux-amd64.tar.gz
+hcloud_binary_path: /usr/local/bin/hcloud
+
+# Script + hook locations
+certbot_scripts_dir: "{{ app_root_dir }}/certbot-scripts"
+certbot_runner_script_path: "{{ certbot_scripts_dir }}/certbot-script.sh"
+certbot_auth_hook_path: "{{ certbot_scripts_dir }}/dns-auth-hetzner.sh"
+
+# Certificate storage and logs
+certbot_certificates_dir: "{{ data_root_dir }}/certificates"
+certbot_config_dir: "{{ certbot_certificates_dir }}"
+certbot_work_dir: "{{ certbot_certificates_dir }}/work"
+certbot_logs_dir: "{{ certbot_certificates_dir }}/logs"
+certbot_cron_log_file: "{{ certbot_logs_dir }}/certbot-script.log"
+certbot_cron_schedule: "22 3,15 * * *"
+
+# Shared access model
+certbot_shared_group: certificates
+certbot_dir_mode: '2770'
+certbot_file_mode: '0660'
+
+# Hetzner DNS hook and certbot settings
+hcloud_zone: ""
+hcloud_token: ""
+hcloud_ttl: 60
+grace_seconds: "{{ hcloud_ttl }}"
+
+certbot_email: ""
+certbot_lineages: []

@@ -1,18 +1,48 @@
 ---
-# This task file installs Certbot (either via OS packages or a managed venv),
-# deploys the Hetzner DNS hook + runner, installs/ensures the hcloud CLI, and
-# sets up a cron job for twice-daily renewals.
-#
-# Behavior knobs (define in group_vars/host_vars if you want):
-#   use_venv: false                 # if true, install certbot in /opt/certbot venv
-#   certbot_venv_path: /opt/certbot # venv path if use_venv
-#   install_certbot_nginx: false    # if true (and use_venv), also pip install certbot-nginx
-#   hcloud_download_url: "https://github.com/hetznercloud/cli/releases/latest/download/hcloud-linux-amd64.tar.gz"
-#   hcloud_binary_path: /usr/local/bin/hcloud  # download-only install
-
 - name: Gather facts (needed for conditionals)
   ansible.builtin.setup:
     gather_subset: min
+
+- name: Validate required role settings
+  ansible.builtin.assert:
+    that:
+      - certbot_scripts_dir | length > 0
+      - certbot_scripts_dir is match('^/')
+      - certbot_runner_script_path | length > 0
+      - certbot_runner_script_path is match('^/')
+      - certbot_auth_hook_path | length > 0
+      - certbot_auth_hook_path is match('^/')
+      - certbot_certificates_dir | length > 0
+      - certbot_certificates_dir is match('^/')
+      - certbot_config_dir | length > 0
+      - certbot_config_dir is match('^/')
+      - certbot_work_dir | length > 0
+      - certbot_work_dir is match('^/')
+      - certbot_logs_dir | length > 0
+      - certbot_logs_dir is match('^/')
+      - certbot_cron_schedule | length > 0
+      - certbot_shared_group | length > 0
+      - certbot_dir_mode is match('^0?[0-7]{3,4}$')
+      - certbot_file_mode is match('^0?[0-7]{3,4}$')
+      - hcloud_zone | length > 0
+      - hcloud_token | length > 0
+      - certbot_email | length > 0
+      - certbot_lineages | length > 0
+    fail_msg: >-
+      certbot_hetzner is missing required settings. Ensure hcloud_zone,
+      hcloud_token, certbot_email, certbot_lineages, and path/group settings are set.
+
+- name: Validate certbot lineages entries
+  ansible.builtin.assert:
+    that:
+      - item.domain is defined
+      - item.certname is defined
+      - item.domain | string | length > 0
+      - item.certname | string | length > 0
+    fail_msg: "Each certbot_lineages item needs non-empty domain and certname: {{ item }}"
+  loop: "{{ certbot_lineages }}"
+  loop_control:
+    label: "{{ item.domain if (item.domain is defined) else '<missing-domain>' }}"
 
 - name: Ensure base tools are present (jq, dig)
   ansible.builtin.package:
@@ -33,13 +63,13 @@
     name: certbot
     state: present
     update_cache: true
-  when: not (use_venv | default(false)) and ansible_os_family == 'Debian'
+  when: not use_venv and ansible_os_family == 'Debian'
 
 - name: Install Certbot via OS packages (RHEL family)
   ansible.builtin.yum:
     name: certbot
     state: present
-  when: not (use_venv | default(false)) and ansible_os_family == 'RedHat'
+  when: not use_venv and ansible_os_family == 'RedHat'
 
 - name: Ensure Python + venv bits for Certbot venv
   ansible.builtin.package:
@@ -51,42 +81,42 @@
         )
       }}
     state: present
-  when: use_venv | default(false)
+  when: use_venv
 
 - name: Create Certbot virtualenv directory
   ansible.builtin.file:
-    path: "{{ certbot_venv_path | default('/opt/certbot') }}"
+    path: "{{ certbot_venv_path }}"
     state: directory
     owner: root
     group: root
     mode: '0755'
-  when: use_venv | default(false)
+  when: use_venv
 
 - name: Create virtualenv for Certbot
   ansible.builtin.command: >-
-    python3 -m venv {{ certbot_venv_path | default('/opt/certbot') }}
+    python3 -m venv {{ certbot_venv_path }}
   args:
-    creates: "{{ certbot_venv_path | default('/opt/certbot') }}/bin/activate"
-  when: use_venv | default(false)
+    creates: "{{ certbot_venv_path }}/bin/activate"
+  when: use_venv
 
 - name: Upgrade pip inside venv
   ansible.builtin.command: >-
-    {{ certbot_venv_path | default('/opt/certbot') }}/bin/pip install --upgrade pip
-  when: use_venv | default(false)
+    {{ certbot_venv_path }}/bin/pip install --upgrade pip
+  when: use_venv
 
 - name: Install certbot (and optional plugins) via pip in venv
   ansible.builtin.command: >-
-    {{ certbot_venv_path | default('/opt/certbot') }}/bin/pip install
-    certbot{{ install_certbot_nginx | default(false) | ternary(' certbot-nginx','') }}
-  when: use_venv | default(false)
+    {{ certbot_venv_path }}/bin/pip install
+    certbot{{ install_certbot_nginx | ternary(' certbot-nginx','') }}
+  when: use_venv
 
 - name: Symlink venv certbot into PATH
   ansible.builtin.file:
-    src: "{{ certbot_venv_path | default('/opt/certbot') }}/bin/certbot"
-    dest: "/usr/local/bin/certbot"
+    src: "{{ certbot_venv_path }}/bin/certbot"
+    dest: /usr/local/bin/certbot
     state: link
     force: true
-  when: use_venv | default(false)
+  when: use_venv
 
 # -----------------------------
 # Hetzner Cloud CLI installation
@@ -99,7 +129,7 @@
 
 - name: Download hcloud CLI tarball (GitHub latest)
   ansible.builtin.get_url:
-    url: "{{ hcloud_download_url | default('https://github.com/hetznercloud/cli/releases/latest/download/hcloud-linux-amd64.tar.gz') }}"
+    url: "{{ hcloud_download_url }}"
     dest: /tmp/hcloud-linux-amd64.tar.gz
     mode: '0644'
   when: hcloud_cmd.rc != 0
@@ -114,7 +144,7 @@
 
 - name: Ensure hcloud binary is executable
   ansible.builtin.file:
-    path: "{{ hcloud_binary_path | default('/usr/local/bin/hcloud') }}"
+    path: "{{ hcloud_binary_path }}"
     mode: '0755'
     owner: root
     group: root
@@ -124,49 +154,62 @@
 # -----------------------------
 # Directories, scripts, cron
 # -----------------------------
-- name: Ensure letsencrypt base dir exists
+- name: Ensure certificate sharing group exists
+  ansible.builtin.group:
+    name: "{{ certbot_shared_group }}"
+    state: present
+
+- name: Ensure certbot script directory exists
   ansible.builtin.file:
-    path: "/etc/letsencrypt"
+    path: "{{ certbot_scripts_dir }}"
     state: directory
     owner: root
     group: root
     mode: '0755'
 
-- name: Ensure letsencrypt log dir exists
+- name: Ensure certificate directories exist
   ansible.builtin.file:
-    path: "/var/log/letsencrypt"
+    path: "{{ item }}"
     state: directory
     owner: root
-    group: root
-    mode: '0755'
+    group: "{{ certbot_shared_group }}"
+    mode: "{{ certbot_dir_mode }}"
+  loop: "{{ [certbot_certificates_dir, certbot_config_dir, certbot_work_dir, certbot_logs_dir] | unique }}"
+
+- name: Ensure certbot cron log file exists with shared access
+  ansible.builtin.file:
+    path: "{{ certbot_cron_log_file }}"
+    state: touch
+    owner: root
+    group: "{{ certbot_shared_group }}"
+    mode: "{{ certbot_file_mode }}"
 
 - name: Deploy Hetzner DNS hook script
   ansible.builtin.copy:
     src: dns-auth-hetzner.sh
-    dest: /etc/letsencrypt/dns-auth-hetzner.sh
+    dest: "{{ certbot_auth_hook_path }}"
     owner: root
     group: root
-    mode: '0755'
+    mode: '0750'
 
 - name: Render certbot runner script
   ansible.builtin.template:
-    src: certbot-script.sh
-    dest: /etc/letsencrypt/certbot-script.sh
+    src: certbot-script.sh.j2
+    dest: "{{ certbot_runner_script_path }}"
     owner: root
     group: root
-    mode: '0700'
+    mode: '0750'
 
-- name: Install cron for twice-daily renew
+- name: Install cron for scheduled renew
   ansible.builtin.copy:
     dest: /etc/cron.d/certbot-hcloud-renew
     owner: root
     group: root
     mode: '0644'
     content: |
-      # Run the Hetzner DNS-01 renewal helper twice daily. Log to separate file.
+      # Run the Hetzner DNS-01 renewal helper on configured schedule. Log to separate file.
       SHELL=/bin/bash
       PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       MAILTO=""
       # minute hour day month weekday user command
-      22 3,15 * * * root /etc/letsencrypt/certbot-script.sh >>/var/log/letsencrypt/certbot-script.log 2>&1
-
+      {{ certbot_cron_schedule }} root {{ certbot_runner_script_path }} >>{{ certbot_cron_log_file }} 2>&1
