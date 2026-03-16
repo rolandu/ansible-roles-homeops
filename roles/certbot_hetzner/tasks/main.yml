@@ -56,100 +56,69 @@
     state: present
 
 # -----------------------------
-# Certbot installation options
+# Certbot installation
 # -----------------------------
-- name: Install Certbot via OS packages (Debian/Ubuntu)
-  ansible.builtin.apt:
-    name: certbot
-    state: present
-    update_cache: true
-  when: not use_venv and ansible_os_family == 'Debian'
-
-- name: Install Certbot via OS packages (RHEL family)
-  ansible.builtin.yum:
-    name: certbot
-    state: present
-  when: not use_venv and ansible_os_family == 'RedHat'
-
-- name: Ensure Python + venv bits for Certbot venv
+- name: Install Certbot via OS packages
   ansible.builtin.package:
-    name: >-
-      {{
-        (ansible_os_family == 'RedHat') | ternary(
-          ['python3','python3-virtualenv','gcc'],
-          ['python3','python3-venv','gcc','libaugeas-dev']
-        )
-      }}
+    name: certbot
     state: present
-  when: use_venv
-
-- name: Create Certbot virtualenv directory
-  ansible.builtin.file:
-    path: "{{ certbot_venv_path }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  when: use_venv
-
-- name: Create virtualenv for Certbot
-  ansible.builtin.command: >-
-    python3 -m venv {{ certbot_venv_path }}
-  args:
-    creates: "{{ certbot_venv_path }}/bin/activate"
-  when: use_venv
-
-- name: Upgrade pip inside venv
-  ansible.builtin.command: >-
-    {{ certbot_venv_path }}/bin/pip install --upgrade pip
-  when: use_venv
-
-- name: Install certbot (and optional plugins) via pip in venv
-  ansible.builtin.command: >-
-    {{ certbot_venv_path }}/bin/pip install
-    certbot{{ install_certbot_nginx | ternary(' certbot-nginx','') }}
-  when: use_venv
-
-- name: Symlink venv certbot into PATH
-  ansible.builtin.file:
-    src: "{{ certbot_venv_path }}/bin/certbot"
-    dest: /usr/local/bin/certbot
-    state: link
-    force: true
-  when: use_venv
 
 # -----------------------------
 # Hetzner Cloud CLI installation
 # -----------------------------
-- name: Check if hcloud is already available
-  ansible.builtin.command: bash -lc 'command -v hcloud'
-  register: hcloud_cmd
+- name: Ensure managed hcloud bin directory exists
+  ansible.builtin.file:
+    path: "{{ app_root_dir }}/bin"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check installed hcloud version from PATH
+  ansible.builtin.shell: >-
+    if command -v hcloud >/dev/null 2>&1; then
+      hcloud version
+    fi
+  args:
+    executable: /bin/bash
+  environment:
+    PATH: "{{ app_root_dir }}/bin:{{ ansible_env.PATH | default('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin') }}"
+  register: hcloud_version_cmd
   changed_when: false
   failed_when: false
 
-- name: Download hcloud CLI tarball (GitHub latest)
+- name: Record installed hcloud version
+  ansible.builtin.set_fact:
+    hcloud_installed_version: >-
+      {{ hcloud_version_cmd.stdout.split()[1] if (hcloud_version_cmd.stdout.split() | length) > 1 else '' }}
+
+- name: Download hcloud CLI tarball
   ansible.builtin.get_url:
     url: "{{ hcloud_download_url }}"
-    dest: /tmp/hcloud-linux-amd64.tar.gz
+    dest: "/tmp/hcloud-linux-amd64-v{{ hcloud_version }}.tar.gz"
     mode: '0644'
-  when: hcloud_cmd.rc != 0
+  when: hcloud_installed_version != hcloud_version
 
 - name: Unpack hcloud binary
   ansible.builtin.unarchive:
-    src: /tmp/hcloud-linux-amd64.tar.gz
-    dest: /usr/local/bin
+    src: "/tmp/hcloud-linux-amd64-v{{ hcloud_version }}.tar.gz"
+    dest: "{{ app_root_dir }}/bin"
     remote_src: true
     extra_opts: ["hcloud"]
-  when: hcloud_cmd.rc != 0
+  when: hcloud_installed_version != hcloud_version
 
 - name: Ensure hcloud binary is executable
   ansible.builtin.file:
-    path: "{{ hcloud_binary_path }}"
+    path: "{{ app_root_dir }}/bin/hcloud"
     mode: '0755'
     owner: root
     group: root
     state: file
-  when: hcloud_cmd.rc != 0
+  when: hcloud_installed_version != hcloud_version
+
+- name: Record managed hcloud binary path
+  ansible.builtin.set_fact:
+    hcloud_managed_binary_path: "{{ app_root_dir }}/bin/hcloud"
 
 # -----------------------------
 # Directories, scripts, cron
@@ -176,17 +145,28 @@
     mode: "{{ certbot_dir_mode }}"
   loop: "{{ [certbot_certificates_dir, certbot_config_dir, certbot_work_dir, certbot_logs_dir] | unique }}"
 
-- name: Ensure certbot cron log file exists with shared access
+- name: Check if certbot cron log file exists
+  ansible.builtin.stat:
+    path: "{{ certbot_cron_log_file }}"
+  register: certbot_cron_log_stat
+
+- name: Create certbot cron log file if missing
   ansible.builtin.file:
     path: "{{ certbot_cron_log_file }}"
     state: touch
+  when: not certbot_cron_log_stat.stat.exists
+
+- name: Ensure certbot cron log file permissions
+  ansible.builtin.file:
+    path: "{{ certbot_cron_log_file }}"
+    state: file
     owner: root
     group: "{{ certbot_shared_group }}"
     mode: "{{ certbot_file_mode }}"
 
 - name: Deploy Hetzner DNS hook script
-  ansible.builtin.copy:
-    src: dns-auth-hetzner.sh
+  ansible.builtin.template:
+    src: certbot-dns-hook-hetzner.sh.j2
     dest: "{{ certbot_auth_hook_path }}"
     owner: root
     group: root
@@ -194,11 +174,27 @@
 
 - name: Render certbot runner script
   ansible.builtin.template:
-    src: certbot-script.sh.j2
+    src: certbot-hetzner-run.sh.j2
     dest: "{{ certbot_runner_script_path }}"
     owner: root
     group: root
     mode: '0750'
+
+# Cleanup legacy script names that might have been used in older versions of the role
+# Will only run if "--tags cleanup" is specified, and will not remove current script paths
+- name: Remove legacy certbot script names
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ certbot_scripts_dir }}/certbot-script.sh"
+    - "{{ certbot_scripts_dir }}/dns-auth-hetzner.sh"
+    - /etc/letsencrypt/certbot-script.sh
+    - /etc/letsencrypt/dns-auth-hetzner.sh
+  when: item not in [certbot_runner_script_path, certbot_auth_hook_path]
+  tags:
+    - never
+    - cleanup
 
 - name: Install cron for scheduled renew
   ansible.builtin.copy:

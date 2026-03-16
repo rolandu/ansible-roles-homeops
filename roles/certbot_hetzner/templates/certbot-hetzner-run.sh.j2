@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+export PATH={{ (app_root_dir ~ '/bin') | quote }}:$PATH
+
 export HCLOUD_ZONE={{ hcloud_zone | quote }}
 export HCLOUD_TOKEN={{ hcloud_token | quote }}
 export HCLOUD_TTL={{ hcloud_ttl | quote }}
@@ -19,6 +21,16 @@ export CERTBOT_LINEAGE_COUNT={{ certbot_lineages | length }}
 
 # export DEBUG=1   # optional
 # export DRYRUN=1  # optional - certbot dryrun, no certs issued
+
+# log_run_start:
+# Print an ISO-8601 timestamped banner so cron runs are visible in the log.
+log_run_start() {
+  local ts
+  ts="$(date --iso-8601=seconds 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S%z')"
+  echo "=== certbot run started at ${ts} ==="
+  [[ "${DRYRUN:-0}" == "1" ]] && echo "=== dry-run mode enabled ==="
+  echo
+}
 
 # require_setting:
 # Fail fast when a required runtime setting is empty or unset.
@@ -126,6 +138,7 @@ makecert() {
 
 # Validate all runtime preconditions once before processing lineages.
 validate_runtime_settings
+log_run_start
 
 # Iterate configured lineages sequentially
 {% for item in certbot_lineages %}

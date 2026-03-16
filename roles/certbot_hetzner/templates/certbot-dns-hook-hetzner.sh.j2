@@ -19,11 +19,13 @@
 #   # Request A SINGLE NAME per run (e.g., only example.com OR only *.example.com)
 #   sudo -E certbot certonly \
 #     --manual --preferred-challenges dns \
-#     --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
-#     --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
+#     --manual-auth-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ auth \
+#     --manual-cleanup-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ cleanup \
 #     -d example.com                         # run again in a separate command for *.example.com
 
 set -euo pipefail
+
+HCLOUD_BIN={{ hcloud_managed_binary_path | quote }}
 
 # ---- Inputs -----------------------------------------------------------------
 : "${HCLOUD_ZONE:?HCLOUD_ZONE not set (zone name or ID)}"
@@ -69,7 +71,7 @@ err() { printf '%s
 # Print a formatted error and exit with failure.
 fail() { err "ERROR: $*"; exit 1; }
 
-command -v hcloud >/dev/null 2>&1 || fail "hcloud CLI not found"
+[[ -x "$HCLOUD_BIN" ]] || fail "hcloud CLI not found or not executable: $HCLOUD_BIN"
 command -v jq >/dev/null 2>&1 || fail "jq not found"
 # dig optional
 
@@ -125,11 +127,11 @@ apply_records() {
   log "[apply] set-records ${HCLOUD_ZONE} ${RR_NAME} TXT with: $(cat "${TMP_DIR}/records.json")"
   # In normal mode silence hcloud stderr chatter so Certbot does not flag false hook errors.
   if [[ "${DEBUG:-0}" == "1" ]]; then
-    hcloud "${HCLOUD_FLAGS[@]}" zone rrset set-records \
+    "$HCLOUD_BIN" "${HCLOUD_FLAGS[@]}" zone rrset set-records \
       --records-file "${TMP_DIR}/records.json" \
       "$HCLOUD_ZONE" "$RR_NAME" TXT
   else
-    hcloud "${HCLOUD_FLAGS[@]}" zone rrset set-records \
+    "$HCLOUD_BIN" "${HCLOUD_FLAGS[@]}" zone rrset set-records \
       --records-file "${TMP_DIR}/records.json" \
       "$HCLOUD_ZONE" "$RR_NAME" TXT >/dev/null 2>&1
   fi
@@ -144,7 +146,7 @@ maybe_create_with_ttl() {
     fail "records.json (create) is not valid JSON"
   fi
   log "[create] trying create with TTL=${TTL} (ok if it already exists)"
-  hcloud "${HCLOUD_FLAGS[@]}" zone rrset create \
+  "$HCLOUD_BIN" "${HCLOUD_FLAGS[@]}" zone rrset create \
     --name "$RR_NAME" --type TXT --ttl "$TTL" \
     --records-file "${TMP_DIR}/records.json" \
     "$HCLOUD_ZONE" >/dev/null 2>&1 || true
@@ -282,13 +284,13 @@ IMPORTANT:
   • Example:
       # 1) apex
       sudo -E certbot certonly --manual --preferred-challenges dns \
-        --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
-        --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
+        --manual-auth-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ auth \
+        --manual-cleanup-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ cleanup \
         -d example.com
       # 2) wildcard (separate command)
       sudo -E certbot certonly --manual --preferred-challenges dns \
-        --manual-auth-hook /opt/certbot/dns-auth-hetzner.sh\ auth \
-        --manual-cleanup-hook /opt/certbot/dns-auth-hetzner.sh\ cleanup \
+        --manual-auth-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ auth \
+        --manual-cleanup-hook /opt/certbot-scripts/certbot-dns-hook-hetzner.sh\ cleanup \
         -d '*.example.com'
 
 Environment:
