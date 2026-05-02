@@ -4,6 +4,8 @@ Install Certbot with a Hetzner DNS-01 helper, deploy the hcloud CLI, and set up 
 
 The role installs required tools, deploys scripts under `/opt/certbot-scripts` by default, stores certbot state/certificates under `/srv/certificates` by default, and registers a cron entry for periodic renewals.
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Defaults and Validation
 
 All role defaults are defined in `defaults/main.yml`.

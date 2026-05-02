@@ -6,6 +6,8 @@
 - Generate per-user SSH keypairs and export public keys to the controller.
 - Key generation/export runs before authorized_keys installation across the play.
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Role Variables
 
 - `ssh_users`: list of user dicts to create. Each item supports:

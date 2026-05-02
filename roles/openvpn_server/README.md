@@ -5,6 +5,8 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
 - Onboard one or more gateway clients that may advertise LANs behind them.
 - Generate configs for roaming/local clients, including export-only clients that are not managed by Ansible.
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Variables
 
 - `openvpn_config` (list, required): VPN definitions. Each entry supports:
