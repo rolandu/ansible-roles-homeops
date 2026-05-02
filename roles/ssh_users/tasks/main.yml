@@ -52,7 +52,7 @@
 # Include Ops User Setup tasks
 - name: "Set up user for passwordless sudo operations (if defined)"
   ansible.builtin.include_tasks: ops_user_setup.yml
-  when: 
+  when:
     - ops_user is defined
     - ops_user is not none
     - ops_user | string | length > 0

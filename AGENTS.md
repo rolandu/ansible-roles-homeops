@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository contains reusable Ansible roles for home infrastructure. Treat it as a role collection first, not as a standalone deployable project: there are no inventory files, playbooks, Molecule scenarios, or committed lint/test harnesses in this repo.
+This repository contains reusable Ansible roles for home or small office infrastructure. Treat it as a role collection first, not as a standalone deployable project: there are no inventory files, playbooks, Molecule scenarios, or CI jobs in this repo. The repo does include a lightweight lint helper under `tests/`.
 
 ## Scope and Layout
 
@@ -48,6 +48,8 @@ Several roles rely on shared path conventions from the root `README.md`:
 - `data_root_dir`: default persistent data root, usually `/srv`
 - `docker_app_base_dir`
 - `docker_data_base_dir`
+
+## Convention
 
 Keep these conventions stable unless there is a clear reason to change them, and update the root `README.md` if they move.
 
@@ -123,11 +125,28 @@ When touching tasks involving secret values:
 
 ## Validation and Testing
 
-There is no committed project-wide test runner in this repository. Do not claim Molecule, `ansible-lint`, or CI coverage unless you add that tooling explicitly.
+There is a lightweight project-wide lint helper:
+
+- `tests/lint-roles.sh`: discovers each direct role under `roles/` and runs `ansible-lint` role by role.
+- `tests/lint-roles.sh --report`: writes the same output to `tests/lint-report.txt` while streaming it to the terminal.
+- `tests/lint-roles.sh --report-file <path>`: writes the report to a custom path. Relative paths resolve from the repo root.
+
+The lint report is a generated working backlog for cleanup. Treat the current
+`ansible-lint` output as the source of truth and regenerate the report after
+fixing findings.
+
+The script prints the role currently being checked before each lint run. It
+continues through all roles and exits non-zero if any role has lint failures.
+
+There are still no committed inventories, caller playbooks, Molecule scenarios,
+or CI jobs in this repository. Do not claim Molecule, runtime integration test,
+or CI coverage unless you add that tooling explicitly.
 
 When making changes:
 
 - inspect the impacted role’s `defaults`, `tasks`, `templates`, `handlers`, and `README.md`
+- run `tests/lint-roles.sh` for broad lint feedback when `ansible-lint` is available
+- run `tests/lint-roles.sh --report` when you want to refresh the agent-friendly lint backlog
 - keep YAML syntax clean and task includes wired correctly
 - if you have a local caller playbook or inventory outside this repo, `ansible-playbook --syntax-check` or a targeted dry run is useful, but that validation usually depends on external files not present here
 - if you cannot run meaningful validation, state that plainly

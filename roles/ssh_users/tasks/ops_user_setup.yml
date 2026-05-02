@@ -17,7 +17,7 @@
   ansible.builtin.user:
     name: "{{ ops_user }}"
     groups: sudo
-    append: yes
+    append: true
 
 - name: "Grant passwordless sudo to {{ ops_user }}"
   ansible.builtin.copy:
@@ -27,5 +27,3 @@
     group: root
     mode: "0440"
     validate: "visudo -cf %s"
-
-

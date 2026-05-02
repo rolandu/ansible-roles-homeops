@@ -1,0 +1,126 @@
+---
+# roles/ssh_user_keys_generate/tasks/main.yml
+
+- name: Validate ssh_user_keys_generate variables
+  ansible.builtin.assert:
+    that:
+      - ssh_user_keys_generate_key_type is string
+      - ssh_user_keys_generate_key_type | length > 0
+      - ssh_user_keys_generate_key_filename is string
+      - ssh_user_keys_generate_key_filename | length > 0
+      - ssh_user_keys_generate_key_comment is string
+      - ssh_user_keys_generate_local_dir is string
+      - ssh_user_keys_generate_local_dir | length > 0
+    fail_msg: Invalid ssh_user_keys_generate role variables.
+  become: false
+
+- name: Detect current SSH user
+  ansible.builtin.command:
+    argv:
+      - id
+      - -un
+  register: ssh_user_keys_generate_current_user_cmd
+  changed_when: false
+  become: false
+
+- name: Detect current SSH user home directory
+  ansible.builtin.shell: 'printf %s "$HOME"'
+  args:
+    executable: /bin/sh
+  register: ssh_user_keys_generate_current_home_cmd
+  changed_when: false
+  become: false
+
+- name: Save detected SSH user facts
+  ansible.builtin.set_fact:
+    ssh_user_keys_generate_current_user: >-
+      {{ ssh_user_keys_generate_current_user_cmd.stdout | trim }}
+    ssh_user_keys_generate_current_home: >-
+      {{ ssh_user_keys_generate_current_home_cmd.stdout | trim }}
+    ssh_user_keys_generate_private_key_path: >-
+      {{
+        (ssh_user_keys_generate_current_home_cmd.stdout | trim)
+        + '/.ssh/'
+        + ssh_user_keys_generate_key_filename
+      }}
+  become: false
+
+- name: Validate detected SSH user facts
+  ansible.builtin.assert:
+    that:
+      - ssh_user_keys_generate_current_user | length > 0
+      - ssh_user_keys_generate_current_home | length > 0
+    fail_msg: Could not detect the current SSH user or home directory.
+  become: false
+
+- name: Ensure ~/.ssh exists for current SSH user
+  ansible.builtin.file:
+    path: "{{ ssh_user_keys_generate_current_home }}/.ssh"
+    state: directory
+    mode: '0700'
+  become: false
+
+- name: Generate SSH key for current SSH user
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -t
+      - "{{ ssh_user_keys_generate_key_type }}"
+      - -f
+      - "{{ ssh_user_keys_generate_private_key_path }}"
+      - -N
+      - ''
+      - -C
+      - "{{ ssh_user_keys_generate_key_comment }}"
+  args:
+    creates: "{{ ssh_user_keys_generate_private_key_path }}"
+  become: false
+
+- name: Check SSH private key for current SSH user
+  ansible.builtin.stat:
+    path: "{{ ssh_user_keys_generate_private_key_path }}"
+  register: ssh_user_keys_generate_private_key_stat
+  become: false
+
+- name: Check SSH public key for current SSH user
+  ansible.builtin.stat:
+    path: "{{ ssh_user_keys_generate_private_key_path }}.pub"
+  register: ssh_user_keys_generate_public_key_stat
+  become: false
+
+- name: Ensure private key permissions for current SSH user
+  ansible.builtin.file:
+    path: "{{ ssh_user_keys_generate_private_key_path }}"
+    mode: '0600'
+  when: ssh_user_keys_generate_private_key_stat.stat.exists | default(false)
+  become: false
+
+- name: Ensure public key permissions for current SSH user
+  ansible.builtin.file:
+    path: "{{ ssh_user_keys_generate_private_key_path }}.pub"
+    mode: '0644'
+  when: ssh_user_keys_generate_public_key_stat.stat.exists | default(false)
+  become: false
+
+- name: Ensure local SSH key artifact directory exists
+  ansible.builtin.file:
+    path: "{{ ssh_user_keys_generate_local_dir }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  become: false
+
+- name: Export public key for current SSH user
+  ansible.builtin.fetch:
+    src: "{{ ssh_user_keys_generate_private_key_path }}.pub"
+    dest: >-
+      {{
+        ssh_user_keys_generate_local_dir
+        + '/'
+        + ssh_user_keys_generate_current_user
+        + '@'
+        + inventory_hostname
+        + '.pub'
+      }}
+    flat: true
+  become: false

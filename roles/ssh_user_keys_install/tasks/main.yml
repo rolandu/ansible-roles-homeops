@@ -1,0 +1,85 @@
+# roles/ssh_user_keys_install/tasks/main.yml
+
+- name: Validate ssh_user_keys_install variables
+  ansible.builtin.assert:
+    that:
+      - ssh_user_keys_install_authorized_keys | type_debug == 'list'
+      - ssh_user_keys_install_authorized_key_files | type_debug == 'list'
+      - ssh_user_keys_install_local_dir is string
+      - ssh_user_keys_install_local_dir | length > 0
+    fail_msg: Invalid ssh_user_keys_install role variables.
+  become: false
+
+- name: Detect current SSH user home directory
+  ansible.builtin.shell: 'printf %s "$HOME"'
+  args:
+    executable: /bin/sh
+  register: ssh_user_keys_install_current_home_cmd
+  changed_when: false
+  become: false
+
+- name: Save detected SSH user facts
+  ansible.builtin.set_fact:
+    ssh_user_keys_install_current_home: "{{ ssh_user_keys_install_current_home_cmd.stdout | trim }}"
+  become: false
+
+- name: Validate detected SSH user facts
+  ansible.builtin.assert:
+    that:
+      - ssh_user_keys_install_current_home | length > 0
+    fail_msg: Could not detect the current SSH user home directory.
+  become: false
+
+- name: Ensure ~/.ssh exists for current SSH user
+  ansible.builtin.file:
+    path: "{{ ssh_user_keys_install_current_home }}/.ssh"
+    state: directory
+    mode: '0700'
+  become: false
+
+- name: Resolve authorized key file paths
+  ansible.builtin.set_fact:
+    ssh_user_keys_install_authorized_key_file_paths: >-
+      {{
+        ssh_user_keys_install_authorized_key_files
+        | map('regex_replace', '^(?!/)', ssh_user_keys_install_local_dir + '/')
+        | list
+      }}
+  become: false
+
+- name: Initialize authorized key file results
+  ansible.builtin.set_fact:
+    ssh_user_keys_install_authorized_key_files_result:
+      results: []
+  become: false
+
+- name: Read authorized key files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  delegate_to: localhost
+  become: false
+  register: ssh_user_keys_install_authorized_key_files_result
+  loop: "{{ ssh_user_keys_install_authorized_key_file_paths }}"
+  when: ssh_user_keys_install_authorized_key_file_paths | length > 0
+
+- name: Assemble authorized keys for current SSH user
+  ansible.builtin.set_fact:
+    ssh_user_keys_install_authorized_keys_combined: >-
+      {{
+        (ssh_user_keys_install_authorized_keys | default([]))
+        + (ssh_user_keys_install_authorized_key_files_result.results | default([])
+           | map(attribute='content')
+           | map('b64decode')
+           | map('trim')
+           | reject('equalto', '')
+           | list)
+      }}
+  become: false
+
+- name: Write authorized_keys for current SSH user
+  ansible.builtin.copy:
+    dest: "{{ ssh_user_keys_install_current_home }}/.ssh/authorized_keys"
+    mode: '0600'
+    content: "{{ ssh_user_keys_install_authorized_keys_combined | join('\n') + '\n' }}"
+  when: ssh_user_keys_install_authorized_keys_combined | length > 0
+  become: false

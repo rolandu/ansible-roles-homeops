@@ -1,15 +1,16 @@
+---
 galaxy_info:
-  role_name: openvpn_client
-  namespace: rolandu
   author: rolandu
-  description: Configure an OpenVPN client from an exported .ovpn profile.
+  description: >-
+    Generate an SSH key for the current SSH user and export the public key to
+    the controller.
   license: MIT
   min_ansible_version: 2.13
   platforms:
-    - name: Ubuntu
+    - name: Debian
       versions:
         - all
-    - name: Debian
+    - name: Ubuntu
       versions:
         - all
 
