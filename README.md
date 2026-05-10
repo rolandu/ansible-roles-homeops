@@ -70,3 +70,25 @@ lint failures.
 There are still no committed inventories, caller playbooks, Molecule scenarios,
 or CI jobs in this repository. Runtime validation generally requires an external
 playbook or inventory.
+
+### Docker scenario tests
+
+Docker-backed scenario tests live under `tests/scenarios/`. These tests create
+temporary SSH-enabled Ubuntu containers and run Ansible against them over real
+SSH.
+
+Current scenarios:
+
+```bash
+tests/scenarios/ssh_user_keys_generate/run.sh
+tests/scenarios/ssh_user_keys_install/run.sh
+```
+
+The scenarios build a shared Ubuntu SSH target image from
+`tests/scenarios/_common/ubuntu-ssh-target/Dockerfile`, create temporary
+inventories under `.ansible-tmp/`, run converge, check idempotence with a second
+converge, and run a verification playbook.
+
+The current user must be able to access Docker. After installing Docker or
+adding your user to the `docker` group, log out and back in before running the
+scenarios.

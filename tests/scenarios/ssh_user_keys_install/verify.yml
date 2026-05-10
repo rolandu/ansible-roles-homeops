@@ -1,0 +1,45 @@
+---
+- name: Verify ssh_user_keys_install
+  hosts: ssh_user_keys_install_targets
+  gather_facts: false
+
+  vars:
+    # The expected list combines inline keys and the key loaded by the role from
+    # the scenario artifact directory.
+    expected_authorized_keys:
+      - "{{ lookup('env', 'HOMEOPS_TEST_CONTROLLER_PUBLIC_KEY') }}"
+      - "{{ lookup('env', 'HOMEOPS_TEST_INLINE_PUBLIC_KEY') }}"
+      - "{{ lookup('env', 'HOMEOPS_TEST_FILE_PUBLIC_KEY') }}"
+
+  tasks:
+    - name: Detect remote SSH user
+      ansible.builtin.command:
+        argv:
+          - id
+          - -un
+      register: remote_user
+      changed_when: false
+
+    - name: Check authorized_keys
+      ansible.builtin.stat:
+        path: /home/ansibletest/.ssh/authorized_keys
+      register: authorized_keys_stat
+
+    - name: Read authorized_keys
+      ansible.builtin.slurp:
+        src: /home/ansibletest/.ssh/authorized_keys
+      register: authorized_keys_file
+
+    # Assert exact contents, not just presence. This catches missing controller
+    # file keys and accidental extra keys.
+    - name: Assert installed authorized_keys state
+      ansible.builtin.assert:
+        that:
+          - remote_user.stdout == 'ansibletest'
+          - authorized_keys_stat.stat.exists
+          - authorized_keys_stat.stat.pw_name == 'ansibletest'
+          - authorized_keys_stat.stat.mode == '0600'
+          - authorized_keys_text.split('\n') | length == 3
+          - authorized_keys_text == expected_authorized_keys | join('\n')
+      vars:
+        authorized_keys_text: "{{ authorized_keys_file.content | b64decode | trim }}"

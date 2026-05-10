@@ -1,0 +1,78 @@
+---
+- name: Verify ssh_user_keys_generate
+  hosts: ssh_user_keys_generate_targets
+  gather_facts: false
+
+  vars:
+    # The generated artifact name follows the role contract:
+    # <current-ssh-user>@<inventory_hostname>.pub.
+    artifacts_dir: "{{ lookup('env', 'HOMEOPS_TEST_ARTIFACTS_DIR') }}"
+    generated_key_path: /home/ansibletest/.ssh/id_homeops_test_ed25519
+    generated_artifact_dir: "{{ artifacts_dir }}/ssh_keys"
+    generated_artifact_path: >-
+      {{ generated_artifact_dir }}/ansibletest@{{ inventory_hostname }}.pub
+
+  tasks:
+    - name: Detect remote SSH user
+      ansible.builtin.command:
+        argv:
+          - id
+          - -un
+      register: remote_user
+      changed_when: false
+
+    - name: Check generated private key
+      ansible.builtin.stat:
+        path: "{{ generated_key_path }}"
+      register: private_key
+
+    - name: Check generated public key
+      ansible.builtin.stat:
+        path: "{{ generated_key_path }}.pub"
+      register: public_key
+
+    - name: Read generated remote public key
+      ansible.builtin.slurp:
+        src: "{{ generated_key_path }}.pub"
+      register: remote_public_key
+
+    - name: Check controller public key artifact directory
+      ansible.builtin.stat:
+        path: "{{ generated_artifact_dir }}"
+      register: public_key_artifact_dir
+      delegate_to: localhost
+      become: false
+
+    - name: Check controller public key artifact
+      ansible.builtin.stat:
+        path: "{{ generated_artifact_path }}"
+      register: public_key_artifact
+      delegate_to: localhost
+      become: false
+
+    - name: Read controller public key artifact
+      ansible.builtin.slurp:
+        src: "{{ generated_artifact_path }}"
+      register: artifact_public_key
+      delegate_to: localhost
+      become: false
+
+    # This proves both halves of the role contract: the remote keypair exists
+    # with SSH-safe permissions, and the controller artifact is the same public
+    # key that was generated on the remote host.
+    - name: Assert generated SSH key state
+      ansible.builtin.assert:
+        that:
+          - remote_user.stdout == 'ansibletest'
+          - private_key.stat.exists
+          - private_key.stat.pw_name == 'ansibletest'
+          - private_key.stat.mode == '0600'
+          - public_key.stat.exists
+          - public_key.stat.pw_name == 'ansibletest'
+          - public_key.stat.mode == '0644'
+          - public_key_artifact_dir.stat.exists
+          - public_key_artifact_dir.stat.isdir
+          - public_key_artifact_dir.stat.mode == '0700'
+          - public_key_artifact.stat.exists
+          - (remote_public_key.content | b64decode | trim) == (artifact_public_key.content | b64decode | trim)
+          - "'homeops-test@' in (remote_public_key.content | b64decode)"
