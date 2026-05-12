@@ -47,6 +47,17 @@ current SSH connection user from both inline keys and controller-side key files.
 The bootstrap controller key is included in the desired key list so Ansible can
 reconnect for the idempotence and verification phases.
 
+Run the full SSH users scenario:
+
+```bash
+tests/scenarios/ssh_users/run.sh
+```
+
+This verifies that `ssh_users` manages declared local groups before users,
+creates a managed user, appends supplementary groups, writes authorized keys,
+leaves unrelated groups alone, removes explicitly absent groups, and remains
+idempotent.
+
 ## Requirements
 
 The current user must be able to access Docker. If Docker was just installed or

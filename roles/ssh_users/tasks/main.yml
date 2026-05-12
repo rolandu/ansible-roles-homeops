@@ -7,6 +7,31 @@
       - ssh_users | default([]) | type_debug == "list"
     fail_msg: "Define ssh_users as a list before including the ssh_users role."
 
+- name: "Validate ssh_users_groups variable"
+  ansible.builtin.assert:
+    that:
+      - ssh_users_groups is defined
+      - ssh_users_groups | default([]) | type_debug == "list"
+    fail_msg: "Define ssh_users_groups as a list before including the ssh_users role."
+
+- name: "Validate ssh_users_groups entries"
+  ansible.builtin.assert:
+    that:
+      - ssh_users_group | type_debug == "dict"
+      - ssh_users_group.name is defined
+      - ssh_users_group.name | string | length > 0
+      - ssh_users_group.state | default('present') in ['present', 'absent']
+    fail_msg: "Each ssh_users_groups item must be a dict with name and optional state present/absent."
+  loop: "{{ ssh_users_groups }}"
+  loop_control:
+    loop_var: ssh_users_group
+    label: "{{ ssh_users_group.name | default('<missing name>') }}"
+  when: ssh_users_groups | length > 0
+
+- name: "Manage SSH user groups"
+  ansible.builtin.include_tasks: manage_groups.yml
+  when: ssh_users_groups | length > 0
+
 - name: "Configure SSH users"
   ansible.builtin.debug:
     msg: "Users: {{ ssh_users | map(attribute='name') | list }}"

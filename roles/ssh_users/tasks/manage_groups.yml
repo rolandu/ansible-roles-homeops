@@ -1,0 +1,12 @@
+---
+- name: "Manage SSH user group"
+  ansible.builtin.group:
+    name: "{{ ssh_users_group.name }}"
+    state: "{{ ssh_users_group.state | default('present') }}"
+    gid: "{{ ssh_users_group.gid | default(omit) }}"
+    system: "{{ ssh_users_group.system | default(omit) }}"
+    local: "{{ ssh_users_group.local | default(omit) }}"
+  loop: "{{ ssh_users_groups }}"
+  loop_control:
+    loop_var: ssh_users_group
+    label: "{{ ssh_users_group.name }}"

@@ -10,10 +10,18 @@
 
 ## Role Variables
 
+- `ssh_users_groups`: list of local group dicts to manage before user creation. Each item supports:
+  - `name` (string, required): group name.
+  - `state` (string, optional, default `present`): either `present` or `absent`.
+  - `gid` (integer, optional): numeric group ID.
+  - `system` (bool, optional): create as a system group when supported by the target.
+  - `local` (bool, optional): force local group commands when supported by the target.
+  Only groups listed here are managed. An empty list does not remove groups.
+
 - `ssh_users`: list of user dicts to create. Each item supports:
   - `name` (string, required): account name.
   - `home` (string, optional): home directory path; defaults to `/home/<name>`.
-  - `extra_groups` (list, optional): extra groups to append (e.g., sudo, docker).
+  - `extra_groups` (list, optional): extra groups to append (e.g., sudo, docker). These groups must already exist or be declared in `ssh_users_groups`.
   - `initial_password_hash` (string, optional): pre-hashed password (e.g. `{{ 'changeme' | password_hash('sha512') }}`) to set on first creation. Passwords are never rotated afterwards.
   - `force_password_reset` (bool, optional, default `true` when an initial password is provided): expire the password after the first creation so the user must change it on first login.
   - `authorized_keys` (list, optional): SSH public keys to place in `~/.ssh/authorized_keys`.
@@ -38,6 +46,10 @@ Include the role and set `ssh_users` as needed.
 ## Example config
 
 ```yaml
+ssh_users_groups:
+  - name: docker
+    state: present
+
 ssh_users:
   - name: ops
     # full example:
