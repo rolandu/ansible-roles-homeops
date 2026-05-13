@@ -238,7 +238,7 @@ build_ssh_command() {
     SSH_COMMAND+=(-o "UserKnownHostsFile=${SSH_KNOWN_HOSTS_FILE}")
   fi
 
-  if [ "${#SSH_EXTRA_ARGS[@]}" -gt 0 ]; then
+  if [ "{% raw %}${#SSH_EXTRA_ARGS[@]}{% endraw %}" -gt 0 ]; then
     SSH_COMMAND+=("${SSH_EXTRA_ARGS[@]}")
   fi
 
@@ -440,8 +440,8 @@ main() {
   require_file "$ARCHIVE_INFO_PATH"
 
   load_subscribers
-  log_info "System subscribers: ${#SUBSCRIBERS_SYS[@]}"
-  log_info "Package subscribers: ${#SUBSCRIBERS_PKG[@]}"
+  log_info "System subscribers: {% raw %}${#SUBSCRIBERS_SYS[@]}{% endraw %}"
+  log_info "Package subscribers: {% raw %}${#SUBSCRIBERS_PKG[@]}{% endraw %}"
 
   build_ssh_command
   run mkdir -p "$LOCAL_BASE_DIR"
