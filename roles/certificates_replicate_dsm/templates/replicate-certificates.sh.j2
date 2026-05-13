@@ -12,16 +12,20 @@ export LOGFILE={{ certificates_replicate_dsm_log_file | quote }}
 export DRY_RUN="${DRY_RUN:-{{ certificates_replicate_dsm_dry_run | ternary('true', 'false') }}}"
 
 {% if certificates_replicate_dsm_cert_src | length > 0 %}
-export CERT_SRC={{ certificates_replicate_dsm_cert_src | quote }}
+export CERT_FILE_NAME_SRC={{ certificates_replicate_dsm_cert_src | quote }}
+export REMOTE_CERT_PATH="${REMOTE_BASE_DIR}/${CERT_FILE_NAME_SRC}"
 {% endif %}
 {% if certificates_replicate_dsm_chain_src | length > 0 %}
-export CHAIN_SRC={{ certificates_replicate_dsm_chain_src | quote }}
+export CHAIN_FILE_NAME_SRC={{ certificates_replicate_dsm_chain_src | quote }}
+export REMOTE_CHAIN_PATH="${REMOTE_BASE_DIR}/${CHAIN_FILE_NAME_SRC}"
 {% endif %}
 {% if certificates_replicate_dsm_fullchain_src | length > 0 %}
-export FULLCHAIN_SRC={{ certificates_replicate_dsm_fullchain_src | quote }}
+export FULLCHAIN_FILE_NAME_SRC={{ certificates_replicate_dsm_fullchain_src | quote }}
+export REMOTE_FULLCHAIN_PATH="${REMOTE_BASE_DIR}/${FULLCHAIN_FILE_NAME_SRC}"
 {% endif %}
 {% if certificates_replicate_dsm_privkey_src | length > 0 %}
-export PRIVKEY_SRC={{ certificates_replicate_dsm_privkey_src | quote }}
+export KEY_FILE_NAME_SRC={{ certificates_replicate_dsm_privkey_src | quote }}
+export REMOTE_KEY_PATH="${REMOTE_BASE_DIR}/${KEY_FILE_NAME_SRC}"
 {% endif %}
 
 exec {{ certificates_replicate_dsm_upstream_script_path | quote }}
