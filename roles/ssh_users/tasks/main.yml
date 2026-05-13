@@ -5,7 +5,8 @@
     that:
       - ssh_users is defined
       - ssh_users | default([]) | type_debug == "list"
-    fail_msg: "Define ssh_users as a list before including the ssh_users role."
+      - ssh_user_install_basic_ssh_config | type_debug == "bool"
+    fail_msg: "Invalid ssh_users role variables."
 
 - name: "Validate ssh_users_groups variable"
   ansible.builtin.assert:

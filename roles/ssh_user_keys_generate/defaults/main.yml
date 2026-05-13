@@ -9,6 +9,7 @@ ssh_user_keys_generate_key_comment: >-
     + '@'
     + inventory_hostname
   }}
+ssh_user_install_basic_ssh_config: true
 
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 ssh_user_keys_generate_local_dir: "{{ artifacts_dir }}/ssh_keys"

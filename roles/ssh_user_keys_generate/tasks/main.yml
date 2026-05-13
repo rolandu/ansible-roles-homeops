@@ -9,6 +9,7 @@
       - ssh_user_keys_generate_key_filename is string
       - ssh_user_keys_generate_key_filename | length > 0
       - ssh_user_keys_generate_key_comment is string
+      - ssh_user_install_basic_ssh_config | type_debug == "bool"
       - ssh_user_keys_generate_local_dir is string
       - ssh_user_keys_generate_local_dir | length > 0
     fail_msg: Invalid ssh_user_keys_generate role variables.
@@ -100,6 +101,19 @@
     path: "{{ ssh_user_keys_generate_private_key_path }}.pub"
     mode: '0644'
   when: ssh_user_keys_generate_public_key_stat.stat.exists | default(false)
+  become: false
+
+- name: Install basic SSH config for current SSH user
+  ansible.builtin.copy:
+    dest: "{{ ssh_user_keys_generate_current_home }}/.ssh/config"
+    content: |
+      Host *
+        IdentityFile ~/.ssh/{{ ssh_user_keys_generate_key_filename }}
+    mode: '0600'
+    force: false
+  when:
+    - ssh_user_install_basic_ssh_config | bool
+    - ssh_user_keys_generate_private_key_stat.stat.exists | default(false)
   become: false
 
 - name: Ensure local SSH key artifact directory exists

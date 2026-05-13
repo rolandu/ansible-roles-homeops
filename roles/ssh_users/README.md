@@ -34,6 +34,7 @@
 - `ssh_users_generate_keys` (bool, default `true`): generate SSH keys for each managed user.
 - `ssh_users_key_type` (string, default `ed25519`): SSH key type for generated keys.
 - `ssh_users_key_filename` (string, default `id_ed25519`): SSH key filename for generated keys.
+- `ssh_user_install_basic_ssh_config` (bool, default `true`): create `~/.ssh/config` for users with generated keys when no config file exists. The generated config sets `Host *` to use `~/.ssh/<ssh_key_filename>` by default and never overwrites an existing file.
 - `artifacts_dir` (string, default `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `ssh_users_key_local_dir` (string, default `{{ artifacts_dir }}/ssh_keys`): local controller path for exported public keys. Files are written as `<user>@<inventory_hostname>.pub`.
 
@@ -84,4 +85,7 @@ ssh_users:
 # define an ops-user that will be used by ansible (passwordless sudo)
 # the user must be contained in the list above!
 ops_user: ops
+
+# Create ~/.ssh/config for users with generated keys, only when absent.
+ssh_user_install_basic_ssh_config: true
 ```

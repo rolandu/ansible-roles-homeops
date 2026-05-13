@@ -66,6 +66,16 @@
         path: /home/homeops_test_user/.ssh/id_homeops_full_ed25519.pub
       register: generated_public_key_stat
 
+    - name: Verify basic SSH config was created for generated key
+      ansible.builtin.stat:
+        path: /home/homeops_test_user/.ssh/config
+      register: ssh_config_stat
+
+    - name: Read basic SSH config for generated key
+      ansible.builtin.slurp:
+        src: /home/homeops_test_user/.ssh/config
+      register: ssh_config_file
+
     - name: Read generated public key from the managed account home directory
       ansible.builtin.slurp:
         src: /home/homeops_test_user/.ssh/id_homeops_full_ed25519.pub
@@ -119,6 +129,11 @@
           - generated_public_key_stat.stat.pw_name == 'homeops_test_user'
           - generated_public_key_stat.stat.gr_name == 'homeops_test_user'
           - generated_public_key_stat.stat.mode == '0644'
+          - ssh_config_stat.stat.exists
+          - ssh_config_stat.stat.pw_name == 'homeops_test_user'
+          - ssh_config_stat.stat.gr_name == 'homeops_test_user'
+          - ssh_config_stat.stat.mode == '0600'
+          - ssh_config_text == expected_ssh_config
           - generated_public_key_remote_text is search('homeops-test-generated@ssh-users-target')
           - generated_public_key_artifact_stat.stat.exists
           - generated_public_key_artifact_text == generated_public_key_remote_text
@@ -135,6 +150,10 @@
         generated_public_key_remote_text: "{{ generated_public_key_remote.content | b64decode | trim }}"
         generated_public_key_artifact_text: "{{ generated_public_key_artifact_file.content | b64decode | trim }}"
         authorized_keys_text: "{{ authorized_keys_file.content | b64decode | trim }}"
+        ssh_config_text: "{{ ssh_config_file.content | b64decode | trim }}"
+        expected_ssh_config: |-
+          Host *
+            IdentityFile ~/.ssh/id_homeops_full_ed25519
         expected_authorized_keys:
           - "{{ expected_inline_authorized_key }}"
           - "{{ expected_file_authorized_key }}"

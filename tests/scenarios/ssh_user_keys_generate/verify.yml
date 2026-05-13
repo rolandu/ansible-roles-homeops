@@ -36,6 +36,16 @@
         src: "{{ generated_key_path }}.pub"
       register: remote_public_key
 
+    - name: Check existing SSH config
+      ansible.builtin.stat:
+        path: /home/ansibletest/.ssh/config
+      register: existing_ssh_config
+
+    - name: Read existing SSH config
+      ansible.builtin.slurp:
+        src: /home/ansibletest/.ssh/config
+      register: existing_ssh_config_file
+
     - name: Check controller public key artifact directory
       ansible.builtin.stat:
         path: "{{ generated_artifact_dir }}"
@@ -70,9 +80,16 @@
           - public_key.stat.exists
           - public_key.stat.pw_name == 'ansibletest'
           - public_key.stat.mode == '0644'
+          - existing_ssh_config.stat.exists
+          - existing_ssh_config.stat.mode == '0600'
+          - (existing_ssh_config_file.content | b64decode | trim) == expected_existing_ssh_config
           - public_key_artifact_dir.stat.exists
           - public_key_artifact_dir.stat.isdir
           - public_key_artifact_dir.stat.mode == '0700'
           - public_key_artifact.stat.exists
           - (remote_public_key.content | b64decode | trim) == (artifact_public_key.content | b64decode | trim)
           - "'homeops-test@' in (remote_public_key.content | b64decode)"
+      vars:
+        expected_existing_ssh_config: |-
+          Host existing
+            HostName existing.example.test

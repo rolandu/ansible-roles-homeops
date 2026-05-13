@@ -58,6 +58,21 @@
     - ssh_user_generate_key | bool
     - ssh_user_pub_key_stat.stat.exists | default(false)
 
+- name: "Install basic SSH config for {{ ssh_user.name }}"
+  ansible.builtin.copy:
+    dest: "{{ ssh_user_home }}/.ssh/config"
+    content: |
+      Host *
+        IdentityFile ~/.ssh/{{ ssh_user_key_filename }}
+    owner: "{{ ssh_user.name }}"
+    group: "{{ ssh_user.name }}"
+    mode: "0600"
+    force: false
+  when:
+    - ssh_user_generate_key | bool
+    - ssh_user_install_basic_ssh_config | bool
+    - ssh_user_key_stat.stat.exists | default(false)
+
 - name: "Ensure local SSH key artifact directory exists"
   ansible.builtin.file:
     path: "{{ ssh_user_key_local_dir }}"
