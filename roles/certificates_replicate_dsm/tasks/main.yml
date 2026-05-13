@@ -1,0 +1,104 @@
+---
+- name: Detect current SSH user home directory
+  ansible.builtin.shell: 'printf %s "$HOME"'
+  args:
+    executable: /bin/sh
+  register: certificates_replicate_dsm_home_cmd
+  changed_when: false
+  become: false
+
+- name: Save certificates_replicate_dsm paths
+  ansible.builtin.set_fact:
+    certificates_replicate_dsm_effective_base_dir: >-
+      {{
+        certificates_replicate_dsm_base_dir
+        if (certificates_replicate_dsm_base_dir | length > 0)
+        else (certificates_replicate_dsm_home_cmd.stdout | trim)
+      }}
+
+- name: Save certificates_replicate_dsm script paths
+  ansible.builtin.set_fact:
+    certificates_replicate_dsm_script_dir: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}
+    certificates_replicate_dsm_upstream_script_path: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_upstream_script_name }}
+    certificates_replicate_dsm_wrapper_script_path: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_wrapper_script_name }}
+    certificates_replicate_dsm_task_script_path: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_task_script_name }}
+    certificates_replicate_dsm_local_base_dir: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_local_cert_dir_name }}
+    certificates_replicate_dsm_log_file: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_log_file_name }}
+
+- name: Validate certificates_replicate_dsm variables
+  ansible.builtin.assert:
+    that:
+      - certificates_replicate_dsm_effective_base_dir | length > 0
+      - certificates_replicate_dsm_effective_base_dir is match('^/')
+      - certificates_replicate_dsm_script_url | length > 0
+      - certificates_replicate_dsm_script_url is match('^https?://')
+      - certificates_replicate_dsm_script_dir_name | length > 0
+      - certificates_replicate_dsm_upstream_script_name | length > 0
+      - certificates_replicate_dsm_wrapper_script_name | length > 0
+      - certificates_replicate_dsm_task_script_name | length > 0
+      - certificates_replicate_dsm_local_cert_dir_name | length > 0
+      - certificates_replicate_dsm_log_file_name | length > 0
+      - certificates_replicate_dsm_domain | length > 0
+      - certificates_replicate_dsm_remote_user | length > 0
+      - certificates_replicate_dsm_remote_host | length > 0
+      - certificates_replicate_dsm_remote_base_dir | length > 0
+      - certificates_replicate_dsm_archive_base_dir | length > 0
+      - certificates_replicate_dsm_archive_base_dir is match('^/')
+      - certificates_replicate_dsm_cert_desc | length > 0
+      - certificates_replicate_dsm_dry_run | type_debug == "bool"
+    fail_msg: >-
+      certificates_replicate_dsm needs domain, remote_user, remote_host,
+      remote_base_dir, cert_desc, and valid script path settings.
+  become: false
+
+- name: Ensure DSM certificate replication directory exists
+  ansible.builtin.file:
+    path: "{{ certificates_replicate_dsm_script_dir }}"
+    state: directory
+    mode: '0700'
+  become: false
+
+- name: Ensure local certificate staging directory exists
+  ansible.builtin.file:
+    path: "{{ certificates_replicate_dsm_local_base_dir }}"
+    state: directory
+    mode: '0700'
+  become: false
+
+- name: Download upstream DSM certificate update script
+  ansible.builtin.get_url:
+    url: "{{ certificates_replicate_dsm_script_url }}"
+    dest: "{{ certificates_replicate_dsm_upstream_script_path }}"
+    mode: '0700'
+  become: false
+
+- name: Render DSM certificate replication wrapper
+  ansible.builtin.template:
+    src: replicate-certificates.sh.j2
+    dest: "{{ certificates_replicate_dsm_wrapper_script_path }}"
+    mode: '0700'
+  become: false
+
+- name: Render DSM Task Scheduler helper script
+  ansible.builtin.template:
+    src: dsm-task-replicate-certificates.sh.j2
+    dest: "{{ certificates_replicate_dsm_task_script_path }}"
+    mode: '0700'
+  become: false
+
+- name: Show DSM Task Scheduler command
+  ansible.builtin.debug:
+    msg:
+      - "Create a DSM Task Scheduler user-defined script running as root."
+      - "Paste this command into the task:"
+      - "{{ certificates_replicate_dsm_task_script_path }}"
+      - "Manual dry run command:"
+      - "DRY_RUN=true {{ certificates_replicate_dsm_wrapper_script_path }}"
+      - "Manual real run command:"
+      - "{{ certificates_replicate_dsm_wrapper_script_path }}"

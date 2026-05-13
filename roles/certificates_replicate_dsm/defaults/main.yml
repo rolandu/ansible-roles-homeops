@@ -1,0 +1,28 @@
+---
+# Upstream script source. This is a raw file URL because git is not assumed to
+# exist on Synology DSM.
+certificates_replicate_dsm_script_url: "https://raw.githubusercontent.com/elfenquetsche/dsm-cert-update/main/update_cert.sh"
+
+# Script locations. Defaults are intentionally rooted in the SSH user's home.
+certificates_replicate_dsm_base_dir: ""
+certificates_replicate_dsm_script_dir_name: "dsm-cert-update"
+certificates_replicate_dsm_upstream_script_name: "update_cert.sh"
+certificates_replicate_dsm_wrapper_script_name: "replicate-certificates.sh"
+certificates_replicate_dsm_task_script_name: "dsm-task-replicate-certificates.sh"
+certificates_replicate_dsm_local_cert_dir_name: "certificates"
+certificates_replicate_dsm_log_file_name: "replicate-certificates.log"
+
+# Upstream script configuration. Set these in inventory or the caller playbook.
+certificates_replicate_dsm_domain: ""
+certificates_replicate_dsm_remote_user: ""
+certificates_replicate_dsm_remote_host: ""
+certificates_replicate_dsm_remote_base_dir: ""
+certificates_replicate_dsm_archive_base_dir: "/usr/syno/etc/certificate/_archive"
+certificates_replicate_dsm_cert_desc: ""
+certificates_replicate_dsm_dry_run: false
+
+# Optional source filename overrides for the upstream script.
+certificates_replicate_dsm_cert_src: ""
+certificates_replicate_dsm_chain_src: ""
+certificates_replicate_dsm_fullchain_src: ""
+certificates_replicate_dsm_privkey_src: ""

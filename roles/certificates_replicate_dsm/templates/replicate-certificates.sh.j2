@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+export DOMAIN={{ certificates_replicate_dsm_domain | quote }}
+export REMOTE_USER={{ certificates_replicate_dsm_remote_user | quote }}
+export REMOTE_HOST={{ certificates_replicate_dsm_remote_host | quote }}
+export REMOTE_BASE_DIR={{ certificates_replicate_dsm_remote_base_dir | quote }}
+export LOCAL_BASE_DIR={{ certificates_replicate_dsm_local_base_dir | quote }}
+export ARCHIVE_BASE_DIR={{ certificates_replicate_dsm_archive_base_dir | quote }}
+export CERT_DESC={{ certificates_replicate_dsm_cert_desc | quote }}
+export LOGFILE={{ certificates_replicate_dsm_log_file | quote }}
+export DRY_RUN="${DRY_RUN:-{{ certificates_replicate_dsm_dry_run | ternary('true', 'false') }}}"
+
+{% if certificates_replicate_dsm_cert_src | length > 0 %}
+export CERT_SRC={{ certificates_replicate_dsm_cert_src | quote }}
+{% endif %}
+{% if certificates_replicate_dsm_chain_src | length > 0 %}
+export CHAIN_SRC={{ certificates_replicate_dsm_chain_src | quote }}
+{% endif %}
+{% if certificates_replicate_dsm_fullchain_src | length > 0 %}
+export FULLCHAIN_SRC={{ certificates_replicate_dsm_fullchain_src | quote }}
+{% endif %}
+{% if certificates_replicate_dsm_privkey_src | length > 0 %}
+export PRIVKEY_SRC={{ certificates_replicate_dsm_privkey_src | quote }}
+{% endif %}
+
+exec {{ certificates_replicate_dsm_upstream_script_path | quote }}
