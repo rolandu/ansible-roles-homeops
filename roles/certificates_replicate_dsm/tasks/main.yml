@@ -48,6 +48,7 @@
       - certificates_replicate_dsm_cert_desc | length > 0
       - certificates_replicate_dsm_dry_run | type_debug == "bool"
       - certificates_replicate_dsm_rsync_copy_links | type_debug == "bool"
+      - certificates_replicate_dsm_root_cert_required | type_debug == "bool"
       - certificates_replicate_dsm_ssh_private_key_path | length == 0 or certificates_replicate_dsm_ssh_private_key_path is match('^/')
       - certificates_replicate_dsm_ssh_strict_host_key_checking | type_debug == "bool"
       - certificates_replicate_dsm_ssh_known_hosts_file | length == 0 or certificates_replicate_dsm_ssh_known_hosts_file is match('^/')

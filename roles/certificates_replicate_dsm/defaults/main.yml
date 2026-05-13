@@ -20,6 +20,7 @@ certificates_replicate_dsm_archive_id: ""
 certificates_replicate_dsm_cert_desc: ""
 certificates_replicate_dsm_dry_run: false
 certificates_replicate_dsm_rsync_copy_links: true
+certificates_replicate_dsm_root_cert_required: false
 
 # Optional source filename overrides for the upstream script.
 certificates_replicate_dsm_cert_src: ""

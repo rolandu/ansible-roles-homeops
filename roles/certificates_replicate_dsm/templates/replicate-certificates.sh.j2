@@ -91,6 +91,9 @@ readonly ROOT_CERT_FILE_NAME_TGT
 RSYNC_COPY_LINKS={{ certificates_replicate_dsm_rsync_copy_links | ternary('true', 'false') | quote }}
 readonly RSYNC_COPY_LINKS
 
+ROOT_CERT_REQUIRED={{ certificates_replicate_dsm_root_cert_required | ternary('true', 'false') | quote }}
+readonly ROOT_CERT_REQUIRED
+
 SSH_PRIVATE_KEY_PATH={{ certificates_replicate_dsm_ssh_private_key_path | quote }}
 readonly SSH_PRIVATE_KEY_PATH
 
@@ -122,6 +125,10 @@ log_line() {
 
 log_info() {
   log_line INFO "$@"
+}
+
+log_warn() {
+  log_line WARN "$@"
 }
 
 log_error() {
@@ -321,7 +328,13 @@ copy_root_cert_from_trust() {
     fi
   done
 
-  fail "No matching root certificate found in DSM trust store for subject: $subj"
+  if [ "$ROOT_CERT_REQUIRED" = "true" ]; then
+    fail "No matching root certificate found in DSM trust store for subject: $subj"
+  fi
+
+  log_warn "No matching root certificate found in DSM trust store for subject: $subj"
+  log_warn "Skipping root.pem update. This is expected when chain.pem contains an intermediate certificate such as Let's Encrypt E7 instead of a root certificate."
+  return 0
 }
 
 update_cert_location() {

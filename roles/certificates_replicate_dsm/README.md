@@ -38,6 +38,7 @@ Optional runtime settings:
 - `certificates_replicate_dsm_archive_id` (string, default empty): optional explicit DSM archive ID. Empty means resolve the archive ID by `certificates_replicate_dsm_cert_desc` from DSM's `INFO` file.
 - `certificates_replicate_dsm_dry_run` (bool, default `false`): default script dry-run mode. You can override per run with `DRY_RUN=true` or `DRY_RUN=false`.
 - `certificates_replicate_dsm_rsync_copy_links` (bool, default `true`): pass `--copy-links` to rsync so Certbot `live/` symlinks are copied as certificate files.
+- `certificates_replicate_dsm_root_cert_required` (bool, default `false`): fail when a matching root certificate cannot be found in DSM's trust store. Disabled by default because Let's Encrypt `chain.pem` commonly contains only the intermediate certificate, such as E7.
 - `certificates_replicate_dsm_cert_src`, `certificates_replicate_dsm_chain_src`, `certificates_replicate_dsm_fullchain_src`, `certificates_replicate_dsm_privkey_src`: optional source filename overrides passed to the upstream script when set.
 - `certificates_replicate_dsm_ssh_private_key_path` (string, default empty): optional SSH private key used by rsync. This is useful when DSM Task Scheduler runs as root but the key lives in another user's home directory.
 - `certificates_replicate_dsm_ssh_strict_host_key_checking` (bool, default `true`): set SSH `StrictHostKeyChecking`.
