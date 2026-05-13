@@ -20,10 +20,8 @@
   ansible.builtin.set_fact:
     certificates_replicate_dsm_script_dir: >-
       {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}
-    certificates_replicate_dsm_upstream_script_path: >-
-      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_upstream_script_name }}
-    certificates_replicate_dsm_wrapper_script_path: >-
-      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_wrapper_script_name }}
+    certificates_replicate_dsm_script_path: >-
+      {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_script_name }}
     certificates_replicate_dsm_task_script_path: >-
       {{ certificates_replicate_dsm_effective_base_dir }}/{{ certificates_replicate_dsm_script_dir_name }}/{{ certificates_replicate_dsm_task_script_name }}
     certificates_replicate_dsm_local_base_dir: >-
@@ -36,11 +34,8 @@
     that:
       - certificates_replicate_dsm_effective_base_dir | length > 0
       - certificates_replicate_dsm_effective_base_dir is match('^/')
-      - certificates_replicate_dsm_script_url | length > 0
-      - certificates_replicate_dsm_script_url is match('^https?://')
       - certificates_replicate_dsm_script_dir_name | length > 0
-      - certificates_replicate_dsm_upstream_script_name | length > 0
-      - certificates_replicate_dsm_wrapper_script_name | length > 0
+      - certificates_replicate_dsm_script_name | length > 0
       - certificates_replicate_dsm_task_script_name | length > 0
       - certificates_replicate_dsm_local_cert_dir_name | length > 0
       - certificates_replicate_dsm_log_file_name | length > 0
@@ -52,6 +47,11 @@
       - certificates_replicate_dsm_archive_base_dir is match('^/')
       - certificates_replicate_dsm_cert_desc | length > 0
       - certificates_replicate_dsm_dry_run | type_debug == "bool"
+      - certificates_replicate_dsm_rsync_copy_links | type_debug == "bool"
+      - certificates_replicate_dsm_ssh_private_key_path | length == 0 or certificates_replicate_dsm_ssh_private_key_path is match('^/')
+      - certificates_replicate_dsm_ssh_strict_host_key_checking | type_debug == "bool"
+      - certificates_replicate_dsm_ssh_known_hosts_file | length == 0 or certificates_replicate_dsm_ssh_known_hosts_file is match('^/')
+      - certificates_replicate_dsm_ssh_extra_args is sequence
     fail_msg: >-
       certificates_replicate_dsm needs domain, remote_user, remote_host,
       remote_base_dir, cert_desc, and valid script path settings.
@@ -71,17 +71,10 @@
     mode: '0700'
   become: false
 
-- name: Download upstream DSM certificate update script
-  ansible.builtin.get_url:
-    url: "{{ certificates_replicate_dsm_script_url }}"
-    dest: "{{ certificates_replicate_dsm_upstream_script_path }}"
-    mode: '0700'
-  become: false
-
-- name: Render DSM certificate replication wrapper
+- name: Render DSM certificate replication script
   ansible.builtin.template:
     src: replicate-certificates.sh.j2
-    dest: "{{ certificates_replicate_dsm_wrapper_script_path }}"
+    dest: "{{ certificates_replicate_dsm_script_path }}"
     mode: '0700'
   become: false
 
@@ -99,6 +92,6 @@
       - "Paste this command into the task:"
       - "{{ certificates_replicate_dsm_task_script_path }}"
       - "Manual dry run command:"
-      - "DRY_RUN=true {{ certificates_replicate_dsm_wrapper_script_path }}"
+      - "DRY_RUN=true {{ certificates_replicate_dsm_script_path }}"
       - "Manual real run command:"
-      - "{{ certificates_replicate_dsm_wrapper_script_path }}"
+      - "{{ certificates_replicate_dsm_script_path }}"
