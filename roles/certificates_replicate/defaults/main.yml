@@ -1,0 +1,35 @@
+---
+app_root_dir: "/opt"
+data_root_dir: "/srv"
+
+certificates_replicate_script_dir: "{{ app_root_dir }}/certificates-replicate"
+certificates_replicate_script_path: >-
+  {{ certificates_replicate_script_dir }}/replicate-certificates.sh
+certificates_replicate_log_file: /var/log/certificates-replicate.log
+
+certificates_replicate_shared_group: certificates
+certificates_replicate_dir_mode: '2770'
+certificates_replicate_file_mode: '0640'
+
+certificates_replicate_install_packages: true
+certificates_replicate_install_cron: true
+certificates_replicate_cron_schedule: "17 4,16 * * *"
+
+certificates_replicate_remote_user: ""
+certificates_replicate_remote_host: ""
+certificates_replicate_remote_base_dir: "{{ data_root_dir }}/certificates/live"
+certificates_replicate_local_base_dir: "{{ data_root_dir }}/certificates/live"
+certificates_replicate_items: []
+
+certificates_replicate_validate_run: false
+certificates_replicate_rsync_copy_links: true
+certificates_replicate_delete: false
+
+certificates_replicate_reload_nginx: true
+certificates_replicate_reload_apache: true
+certificates_replicate_post_sync_commands: []
+
+certificates_replicate_ssh_private_key_path: ""
+certificates_replicate_ssh_strict_host_key_checking: true
+certificates_replicate_ssh_known_hosts_file: ""
+certificates_replicate_ssh_extra_args: []

@@ -3,5 +3,12 @@ galaxy_info:
   description: Update Debian/Ubuntu hosts and reboot if needed.
   license: MIT
   min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
 
 dependencies: []

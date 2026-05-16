@@ -1,0 +1,38 @@
+---
+- name: Converge ssh_users
+  hosts: ssh_users_targets
+  gather_facts: false
+  become: true
+
+  vars:
+    # Keep all controller-side files inside this scenario's temporary work tree.
+    artifacts_dir: "{{ lookup('env', 'HOMEOPS_TEST_ARTIFACTS_DIR') }}"
+    # Exercise the full role flow: generate a key before authorized_keys install.
+    ssh_users_generate_keys: true
+    # The sudo setup path is tested separately by user management here; keeping
+    # ops_user null avoids replacing the bootstrap Ansible user's sudo state.
+    ops_user: null
+    # The role should manage only these declared local groups. An empty list
+    # would be a no-op; this scenario includes present and absent states.
+    ssh_users_groups:
+      - name: certificates  # created before users so extra_groups can use it
+        state: present
+      - name: homeops_absent_group  # removed because it is explicitly listed
+        state: absent
+    # This user exercises creation, supplementary groups, generated SSH keys,
+    # inline authorized_keys, and authorized_key_files resolved from artifacts.
+    ssh_users:
+      - name: homeops_test_user
+        extra_groups:
+          - certificates
+        authorized_keys:
+          - "{{ lookup('env', 'HOMEOPS_TEST_INLINE_PUBLIC_KEY') }}"  # direct inline key
+        authorized_key_files:
+          - file_key.pub  # independent controller-side public key
+          - homeops_test_user@ssh-users-target.pub  # key generated earlier by this role
+        generate_ssh_key: true
+        ssh_key_filename: id_homeops_full_ed25519
+        ssh_key_comment: homeops-test-generated@ssh-users-target
+
+  roles:
+    - ssh_users

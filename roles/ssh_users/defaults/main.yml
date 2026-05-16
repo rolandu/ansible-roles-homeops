@@ -1,5 +1,8 @@
 # roles/ssh_users/defaults/main.yml
 
+# local groups to create/remove before managing users
+ssh_users_groups: []
+
 # array of users to create/manage
 ssh_users: []
 
@@ -9,6 +12,7 @@ ssh_users: []
 ssh_users_generate_keys: true
 ssh_users_key_type: ed25519
 ssh_users_key_filename: id_ed25519
+ssh_user_install_basic_ssh_config: true
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 ssh_users_key_local_dir: "{{ artifacts_dir }}/ssh_keys"
 

@@ -1,0 +1,29 @@
+---
+- name: Converge ssh_user_keys_generate
+  hosts: ssh_user_keys_generate_targets
+  gather_facts: false
+
+  vars:
+    # The scenario driver sets this to .ansible-tmp/scenarios/.../artifacts so
+    # exported public keys never touch a real inventory artifact directory.
+    artifacts_dir: "{{ lookup('env', 'HOMEOPS_TEST_ARTIFACTS_DIR') }}"
+    ssh_user_keys_generate_key_filename: id_homeops_test_ed25519
+    ssh_user_keys_generate_key_comment: "homeops-test@{{ inventory_hostname }}"
+
+  pre_tasks:
+    - name: Ensure existing SSH config directory
+      ansible.builtin.file:
+        path: /home/ansibletest/.ssh
+        state: directory
+        mode: '0700'
+
+    - name: Seed existing SSH config that must not be overwritten
+      ansible.builtin.copy:
+        dest: /home/ansibletest/.ssh/config
+        content: |
+          Host existing
+            HostName existing.example.test
+        mode: '0600'
+
+  roles:
+    - ssh_user_keys_generate

@@ -2,6 +2,8 @@
 
 Update Debian/Ubuntu hosts by refreshing apt metadata, applying full upgrades, cleaning leftover packages, and rebooting if the kernel requests it.
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Role Variables
 
 - `update_debian_ubuntu_cache_valid_time` (default: `3600`): Seconds apt metadata is considered fresh when refreshing the cache.

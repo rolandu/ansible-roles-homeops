@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+REMOTE_USER={{ certificates_replicate_remote_user | quote }}
+REMOTE_HOST={{ certificates_replicate_remote_host | quote }}
+SHARED_GROUP={{ certificates_replicate_shared_group | quote }}
+DIR_MODE={{ certificates_replicate_dir_mode | quote }}
+FILE_MODE={{ certificates_replicate_file_mode | quote }}
+RSYNC_COPY_LINKS={{ certificates_replicate_rsync_copy_links | ternary('true', 'false') | quote }}
+RSYNC_DELETE={{ certificates_replicate_delete | ternary('true', 'false') | quote }}
+RELOAD_NGINX={{ certificates_replicate_reload_nginx | ternary('true', 'false') | quote }}
+RELOAD_APACHE={{ certificates_replicate_reload_apache | ternary('true', 'false') | quote }}
+SSH_PRIVATE_KEY_PATH={{ certificates_replicate_ssh_private_key_path | quote }}
+SSH_STRICT_HOST_KEY_CHECKING={{ certificates_replicate_ssh_strict_host_key_checking | ternary('yes', 'no') | quote }}
+SSH_KNOWN_HOSTS_FILE={{ certificates_replicate_ssh_known_hosts_file | quote }}
+
+SSH_EXTRA_ARGS=(
+{% for arg in certificates_replicate_ssh_extra_args %}
+  {{ arg | quote }}
+{% endfor %}
+)
+
+POST_SYNC_COMMANDS=(
+{% for command in certificates_replicate_post_sync_commands %}
+  {{ command | quote }}
+{% endfor %}
+)
+
+log() {
+  printf '[%s] %s\n' "$(date -Iseconds)" "$*"
+}
+
+fail() {
+  log "ERROR: $*"
+  exit 1
+}
+
+run() {
+  log "+ $*"
+  "$@"
+}
+
+build_ssh_command() {
+  local ssh_cmd=(ssh -o "StrictHostKeyChecking=${SSH_STRICT_HOST_KEY_CHECKING}")
+
+  if [ -n "$SSH_PRIVATE_KEY_PATH" ]; then
+    ssh_cmd+=(-i "$SSH_PRIVATE_KEY_PATH")
+  fi
+
+  if [ -n "$SSH_KNOWN_HOSTS_FILE" ]; then
+    ssh_cmd+=(-o "UserKnownHostsFile=${SSH_KNOWN_HOSTS_FILE}")
+  fi
+
+{% raw %}
+  if [ "${#SSH_EXTRA_ARGS[@]}" -gt 0 ]; then
+{% endraw %}
+    ssh_cmd+=("${SSH_EXTRA_ARGS[@]}")
+  fi
+
+  printf '%q ' "${ssh_cmd[@]}"
+}
+
+normalize_permissions() {
+  local path="$1"
+
+  run chgrp -R "$SHARED_GROUP" "$path"
+  run find "$path" -type d -exec chmod "$DIR_MODE" {} +
+  run find "$path" -type f -exec chmod "$FILE_MODE" {} +
+}
+
+tree_fingerprint() {
+  local path="$1"
+  local entry
+
+  if [ ! -d "$path" ]; then
+    printf '__missing__\n'
+    return 0
+  fi
+
+  (
+    cd "$path"
+    find . \( -type f -o -type l \) -print0 |
+      sort -z |
+      while IFS= read -r -d '' entry; do
+        if [ -L "$entry" ]; then
+          printf 'link  %s -> %s\n' "$entry" "$(readlink "$entry")"
+        elif [ -f "$entry" ]; then
+          sha256sum "$entry"
+        fi
+      done
+  )
+}
+
+sync_item() {
+  local name="$1"
+  local remote_path="${2%/}"
+  local local_path="${3%/}"
+  local source="${REMOTE_USER}@${REMOTE_HOST}:${remote_path}/"
+  local output
+  local status
+  local rsync_rsh
+  local fingerprint_before
+  local fingerprint_after
+  local rsync_options=(
+    -ac
+    --no-perms
+    --no-owner
+    --no-group
+    --itemize-changes
+  )
+
+  if [ "$RSYNC_COPY_LINKS" = "true" ]; then
+    rsync_options+=(--copy-links)
+  fi
+
+  if [ "$RSYNC_DELETE" = "true" ]; then
+    rsync_options+=(--delete)
+  fi
+
+  mkdir -p "$local_path"
+  fingerprint_before="$(tree_fingerprint "$local_path")"
+  rsync_rsh="$(build_ssh_command)"
+
+  log "Syncing ${name}: ${source} -> ${local_path}/"
+  set +e
+  output="$(rsync "${rsync_options[@]}" -e "$rsync_rsh" "$source" "${local_path}/" 2>&1)"
+  status=$?
+  set -e
+
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output"
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    fail "rsync failed for ${name} with exit code ${status}"
+  fi
+
+  normalize_permissions "$local_path"
+  fingerprint_after="$(tree_fingerprint "$local_path")"
+
+  if [ "$fingerprint_before" != "$fingerprint_after" ]; then
+    log "Certificate file content changed for ${name}"
+    changed=true
+  elif [ -n "$output" ]; then
+    log "Only metadata or directory changes detected for ${name}; reload not needed"
+  else
+    log "No certificate file changes detected for ${name}"
+  fi
+
+  return 0
+}
+
+systemd_service_active() {
+  local service="$1"
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    log "systemctl not found; cannot check service ${service}"
+    return 1
+  fi
+
+  systemctl is-active --quiet "$service"
+}
+
+run_validation_and_reload() {
+  local label="$1"
+  local service="$2"
+  local validate_command="$3"
+  local reload_command="$4"
+
+  if ! systemd_service_active "$service"; then
+    log "${label} service '${service}' is not active; reload skipped"
+    return 0
+  fi
+
+  log "Validating ${label} configuration"
+  if ! bash -c "$validate_command"; then
+    fail "${label} configuration validation failed"
+  fi
+
+  log "Reloading ${label} service '${service}'"
+  if ! bash -c "$reload_command"; then
+    fail "${label} reload failed"
+  fi
+
+  log "${label} reload completed"
+}
+
+reload_nginx_if_present() {
+  if [ "$RELOAD_NGINX" != "true" ]; then
+    log "nginx reload disabled"
+    return 0
+  fi
+
+  if ! command -v nginx >/dev/null 2>&1; then
+    log "nginx command not found; reload skipped"
+    return 0
+  fi
+
+  run_validation_and_reload nginx nginx "nginx -t" "systemctl reload nginx"
+}
+
+reload_apache_if_present() {
+  if [ "$RELOAD_APACHE" != "true" ]; then
+    log "Apache reload disabled"
+    return 0
+  fi
+
+  if command -v apache2ctl >/dev/null 2>&1; then
+    run_validation_and_reload apache apache2 \
+      "apache2ctl configtest" "systemctl reload apache2"
+    return 0
+  fi
+
+  if command -v httpd >/dev/null 2>&1; then
+    run_validation_and_reload apache httpd "httpd -t" "systemctl reload httpd"
+    return 0
+  fi
+
+  log "Apache command not found; reload skipped"
+}
+
+reload_webservers_if_needed() {
+  log "Checking installed webservers for reload"
+  reload_nginx_if_present
+  reload_apache_if_present
+}
+
+run_post_sync_commands() {
+  local command
+
+  for command in "${POST_SYNC_COMMANDS[@]}"; do
+    [ -n "$command" ] || continue
+    log "Running post-sync command: ${command}"
+    if ! bash -c "$command"; then
+      fail "Post-sync command failed: ${command}"
+    fi
+    log "Post-sync command completed: ${command}"
+  done
+}
+
+main() {
+  local changed=false
+  local status
+
+  log "Certificate replication started"
+
+{% for item in certificates_replicate_effective_items %}
+  set +e
+  sync_item {{ item.name | quote }} {{ item.remote_path | quote }} {{ item.local_path | quote }}
+  status=$?
+  set -e
+  if [ "$status" -ne 0 ]; then
+    exit "$status"
+  fi
+{% endfor %}
+
+  if [ "$changed" = "true" ]; then
+    log "Certificate changes detected"
+    reload_webservers_if_needed
+    run_post_sync_commands
+  else
+    log "No certificate changes detected"
+  fi
+
+  log "Certificate replication completed"
+}
+
+main "$@"

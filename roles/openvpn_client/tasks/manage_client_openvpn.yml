@@ -11,7 +11,7 @@
   apt:
     name: openvpn
     state: present
-    update_cache: yes
+    update_cache: true
   when: not openvpn_client_package_installed | bool
   register: openvpn_client_package
   notify: Restart OpenVPN client service
@@ -65,7 +65,7 @@
   apt:
     name: openvpn-systemd-resolved
     state: present
-    update_cache: yes
+    update_cache: true
   when:
     - openvpn_client_dns_handler == 'systemd-resolved'
     - not openvpn_client_resolved_installed | bool
@@ -216,7 +216,7 @@
 - name: Enable and start OpenVPN client service
   systemd:
     name: "{{ openvpn_client_systemd_unit }}"
-    enabled: yes
+    enabled: true
     state: started
-    daemon_reload: yes
+    daemon_reload: true
   notify: Restart OpenVPN client service

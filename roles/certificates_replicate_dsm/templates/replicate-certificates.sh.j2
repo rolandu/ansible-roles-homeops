@@ -1,0 +1,478 @@
+#!/bin/bash
+set -euo pipefail
+
+# Vendored and adapted from:
+# https://github.com/elfenquetsche/dsm-cert-update/blob/main/update_cert.sh
+#
+# The role renders configuration directly into this script so DSM Task Scheduler
+# can run one file as root without depending on a separate environment wrapper.
+
+DRY_RUN="${DRY_RUN:-{{ certificates_replicate_dsm_dry_run | ternary('true', 'false') }}}"
+readonly DRY_RUN
+
+LOGFILE={{ certificates_replicate_dsm_log_file | quote }}
+readonly LOGFILE
+
+DOMAIN={{ certificates_replicate_dsm_domain | quote }}
+readonly DOMAIN
+
+REMOTE_USER={{ certificates_replicate_dsm_remote_user | quote }}
+readonly REMOTE_USER
+
+REMOTE_HOST={{ certificates_replicate_dsm_remote_host | quote }}
+readonly REMOTE_HOST
+
+CERT_DESC={{ certificates_replicate_dsm_cert_desc | quote }}
+readonly CERT_DESC
+
+LOCAL_BASE_DIR={{ certificates_replicate_dsm_local_base_dir | quote }}
+readonly LOCAL_BASE_DIR
+
+ARCHIVE_BASE_DIR={{ certificates_replicate_dsm_archive_base_dir | quote }}
+readonly ARCHIVE_BASE_DIR
+
+CONFIGURED_ARCHIVE_ID={{ certificates_replicate_dsm_archive_id | quote }}
+readonly CONFIGURED_ARCHIVE_ID
+
+ARCHIVE_INFO_PATH="${ARCHIVE_BASE_DIR}/INFO"
+readonly ARCHIVE_INFO_PATH
+
+SUBS_DIR_SYS="/usr/syno/etc/certificate"
+readonly SUBS_DIR_SYS
+
+SUBS_DIR_PKG="/usr/local/etc/certificate"
+readonly SUBS_DIR_PKG
+
+REMOTE_BASE_DIR={{ certificates_replicate_dsm_remote_base_dir | quote }}
+readonly REMOTE_BASE_DIR
+
+CERT_FILE_NAME_SRC={{ (certificates_replicate_dsm_cert_src if certificates_replicate_dsm_cert_src | length > 0 else certificates_replicate_dsm_domain + '.cer') | quote }}
+readonly CERT_FILE_NAME_SRC
+
+CHAIN_FILE_NAME_SRC={{ (certificates_replicate_dsm_chain_src if certificates_replicate_dsm_chain_src | length > 0 else 'ca.cer') | quote }}
+readonly CHAIN_FILE_NAME_SRC
+
+FULLCHAIN_FILE_NAME_SRC={{ (certificates_replicate_dsm_fullchain_src if certificates_replicate_dsm_fullchain_src | length > 0 else 'fullchain.cer') | quote }}
+readonly FULLCHAIN_FILE_NAME_SRC
+
+KEY_FILE_NAME_SRC={{ (certificates_replicate_dsm_privkey_src if certificates_replicate_dsm_privkey_src | length > 0 else certificates_replicate_dsm_domain + '.key') | quote }}
+readonly KEY_FILE_NAME_SRC
+
+REMOTE_CERT_PATH="${REMOTE_BASE_DIR}/${CERT_FILE_NAME_SRC}"
+readonly REMOTE_CERT_PATH
+
+REMOTE_CHAIN_PATH="${REMOTE_BASE_DIR}/${CHAIN_FILE_NAME_SRC}"
+readonly REMOTE_CHAIN_PATH
+
+REMOTE_FULLCHAIN_PATH="${REMOTE_BASE_DIR}/${FULLCHAIN_FILE_NAME_SRC}"
+readonly REMOTE_FULLCHAIN_PATH
+
+REMOTE_KEY_PATH="${REMOTE_BASE_DIR}/${KEY_FILE_NAME_SRC}"
+readonly REMOTE_KEY_PATH
+
+CERT_FILE_NAME_TGT="cert.pem"
+readonly CERT_FILE_NAME_TGT
+
+CHAIN_FILE_NAME_TGT="chain.pem"
+readonly CHAIN_FILE_NAME_TGT
+
+FULLCHAIN_FILE_NAME_TGT="fullchain.pem"
+readonly FULLCHAIN_FILE_NAME_TGT
+
+KEY_FILE_NAME_TGT="privkey.pem"
+readonly KEY_FILE_NAME_TGT
+
+SHORTCHAIN_FILE_NAME_TGT="short-chain.pem"
+readonly SHORTCHAIN_FILE_NAME_TGT
+
+ROOT_CERT_FILE_NAME_TGT="root.pem"
+readonly ROOT_CERT_FILE_NAME_TGT
+
+RSYNC_COPY_LINKS={{ certificates_replicate_dsm_rsync_copy_links | ternary('true', 'false') | quote }}
+readonly RSYNC_COPY_LINKS
+
+ROOT_CERT_REQUIRED={{ certificates_replicate_dsm_root_cert_required | ternary('true', 'false') | quote }}
+readonly ROOT_CERT_REQUIRED
+
+SSH_PRIVATE_KEY_PATH={{ certificates_replicate_dsm_ssh_private_key_path | quote }}
+readonly SSH_PRIVATE_KEY_PATH
+
+SSH_STRICT_HOST_KEY_CHECKING={{ certificates_replicate_dsm_ssh_strict_host_key_checking | ternary('yes', 'no') | quote }}
+readonly SSH_STRICT_HOST_KEY_CHECKING
+
+SSH_KNOWN_HOSTS_FILE={{ certificates_replicate_dsm_ssh_known_hosts_file | quote }}
+readonly SSH_KNOWN_HOSTS_FILE
+
+SSH_EXTRA_ARGS=(
+{% for arg in certificates_replicate_dsm_ssh_extra_args %}
+  {{ arg | quote }}
+{% endfor %}
+)
+readonly SSH_EXTRA_ARGS
+
+date_str() {
+  date '+%Y-%m-%d %H:%M:%S'
+}
+
+log_line() {
+  local level="$1"
+  shift
+  local entry
+  entry="[$(date_str)] ${level}: $*"
+  printf '%s\n' "$entry"
+  printf '%s\n' "$entry" >> "$LOGFILE"
+}
+
+log_info() {
+  log_line INFO "$@"
+}
+
+log_warn() {
+  log_line WARN "$@"
+}
+
+log_error() {
+  log_line ERROR "$@" >&2
+}
+
+fail() {
+  log_error "$@"
+  exit 1
+}
+
+run() {
+  local output status
+
+  log_info "Running: $*"
+  if [ "$DRY_RUN" = "true" ]; then
+    log_info "Dry run: command not executed"
+    return 0
+  fi
+
+  set +e
+  output=$("$@" 2>&1)
+  status=$?
+  set -e
+
+  if [ -n "$output" ]; then
+    log_info "Output from '$*':"
+    printf '%s\n' "$output" | while IFS= read -r line; do
+      log_info "  $line"
+    done
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    log_error "Command failed with exit code $status: $*"
+    return "$status"
+  fi
+
+  log_info "Command succeeded: $*"
+  return 0
+}
+
+require_file() {
+  local path="$1"
+  [ -f "$path" ] || fail "Required file not found: $path"
+}
+
+load_archive_info() {
+  require_file "$ARCHIVE_INFO_PATH"
+  ARCHIVE_INFO_JSON="$(< "$ARCHIVE_INFO_PATH")"
+  readonly ARCHIVE_INFO_JSON
+}
+
+resolve_archive_id() {
+  local archive_id
+
+  if [ -n "$CONFIGURED_ARCHIVE_ID" ]; then
+    printf '%s\n' "$CONFIGURED_ARCHIVE_ID"
+    return 0
+  fi
+
+  archive_id=$(
+    jq -r --arg CERT_DESC "$CERT_DESC" '
+      to_entries[]
+      | select(.value.desc == $CERT_DESC)
+      | .key
+    ' <<< "$ARCHIVE_INFO_JSON" | head -n1
+  )
+
+  if [ -n "$archive_id" ] && [ "$archive_id" != "null" ]; then
+    printf '%s\n' "$archive_id"
+    return 0
+  fi
+
+  fail "Could not find DSM certificate archive ID for description: $CERT_DESC"
+}
+
+load_subscribers() {
+  mapfile -t SUBSCRIBERS_SYS < <(
+    jq -r --arg CERT_DESC "$CERT_DESC" '
+      .[] | select(.desc == $CERT_DESC)
+      | .services[] | select(.isPkg == false)
+      | .subscriber
+    ' <<< "$ARCHIVE_INFO_JSON" | sort -u
+  )
+
+  mapfile -t SUBSCRIBERS_PKG < <(
+    jq -r --arg CERT_DESC "$CERT_DESC" '
+      .[] | select(.desc == $CERT_DESC)
+      | .services[] | select(.isPkg == true)
+      | .subscriber
+    ' <<< "$ARCHIVE_INFO_JSON" | sort -u
+  )
+
+  readonly SUBSCRIBERS_SYS
+  readonly SUBSCRIBERS_PKG
+}
+
+build_ssh_command() {
+  SSH_COMMAND=(
+    ssh
+    -o
+    BatchMode=yes
+    -o
+    "StrictHostKeyChecking=${SSH_STRICT_HOST_KEY_CHECKING}"
+  )
+
+  if [ -n "$SSH_PRIVATE_KEY_PATH" ]; then
+    require_file "$SSH_PRIVATE_KEY_PATH"
+    SSH_COMMAND+=(-i "$SSH_PRIVATE_KEY_PATH")
+  fi
+
+  if [ -n "$SSH_KNOWN_HOSTS_FILE" ]; then
+    require_file "$SSH_KNOWN_HOSTS_FILE"
+    SSH_COMMAND+=(-o "UserKnownHostsFile=${SSH_KNOWN_HOSTS_FILE}")
+  fi
+
+  if [ "{% raw %}${#SSH_EXTRA_ARGS[@]}{% endraw %}" -gt 0 ]; then
+    SSH_COMMAND+=("${SSH_EXTRA_ARGS[@]}")
+  fi
+
+  printf -v RSYNC_RSH '%q ' "${SSH_COMMAND[@]}"
+  readonly RSYNC_RSH
+}
+
+copy_file() {
+  local src="$1"
+  local tgt="$2"
+
+  if [ "$DRY_RUN" = "true" ]; then
+    log_info "Dry run: would copy '$src' to '$tgt'"
+    return 0
+  fi
+
+  run cp "$src" "$tgt"
+}
+
+copy_cert_files() {
+  local src="$1"
+  local tgt="$2"
+  local source_uses_source_names="${3:-false}"
+  local key_src key_tgt tmp first_line
+
+  if [ "$source_uses_source_names" = "true" ]; then
+    copy_file "$src/$CERT_FILE_NAME_SRC" "$tgt/$CERT_FILE_NAME_TGT"
+    copy_file "$src/$CHAIN_FILE_NAME_SRC" "$tgt/$CHAIN_FILE_NAME_TGT"
+    copy_file "$src/$FULLCHAIN_FILE_NAME_SRC" "$tgt/$FULLCHAIN_FILE_NAME_TGT"
+
+    key_src="$src/$KEY_FILE_NAME_SRC"
+    key_tgt="$tgt/$KEY_FILE_NAME_TGT"
+    tmp="/tmp/${KEY_FILE_NAME_TGT}.$$"
+    first_line="$(head -n1 "$key_src")"
+
+    if [ "$first_line" = "-----BEGIN PRIVATE KEY-----" ]; then
+      copy_file "$key_src" "$key_tgt"
+    else
+      run openssl pkcs8 -topk8 -nocrypt -in "$key_src" -out "$tmp"
+      copy_file "$tmp" "$key_tgt"
+      run rm "$tmp"
+    fi
+  else
+    copy_file "$src/$CERT_FILE_NAME_TGT" "$tgt/$CERT_FILE_NAME_TGT"
+    copy_file "$src/$CHAIN_FILE_NAME_TGT" "$tgt/$CHAIN_FILE_NAME_TGT"
+    copy_file "$src/$FULLCHAIN_FILE_NAME_TGT" "$tgt/$FULLCHAIN_FILE_NAME_TGT"
+    copy_file "$src/$KEY_FILE_NAME_TGT" "$tgt/$KEY_FILE_NAME_TGT"
+  fi
+
+  run chown root:root "$tgt"/*.pem
+  run chmod 600 "$tgt"/*.pem
+}
+
+copy_root_cert_from_trust() {
+  local chain="$1"
+  local target="$2"
+  local trust="/etc/ssl/certs"
+  local last subj c
+
+  require_file "$chain"
+
+  last=$(
+    awk '
+      /-----BEGIN CERTIFICATE-----/ { in_cert=1; cert=$0 ORS; next }
+      in_cert { cert=cert $0 ORS }
+      /-----END CERTIFICATE-----/ { last_cert=cert; in_cert=0 }
+      END { printf "%s", last_cert }
+    ' "$chain"
+  )
+  [ -n "$last" ] || fail "Could not extract last certificate from chain: $chain"
+
+  subj="$(printf '%s' "$last" | openssl x509 -noout -subject 2>/dev/null | sed 's/^subject= //')"
+  [ -n "$subj" ] || fail "Could not read root certificate subject from chain: $chain"
+
+  for c in "$trust"/*.pem "$trust"/*.0; do
+    [ -f "$c" ] || continue
+    if openssl x509 -noout -subject -in "$c" 2>/dev/null | sed 's/^subject= //' | grep -Fxq "$subj"; then
+      copy_file "$c" "$target"
+      return 0
+    fi
+  done
+
+  if [ "$ROOT_CERT_REQUIRED" = "true" ]; then
+    fail "No matching root certificate found in DSM trust store for subject: $subj"
+  fi
+
+  log_warn "No matching root certificate found in DSM trust store for subject: $subj"
+  log_warn "Skipping root.pem update. This is expected when chain.pem contains an intermediate certificate such as Let's Encrypt E7 instead of a root certificate."
+  return 0
+}
+
+update_cert_location() {
+  local type="$1"
+  local dir is_pkg subscriber services svc
+
+  if [ "$type" = "system" ]; then
+    dir="$SUBS_DIR_SYS"
+    is_pkg=false
+    local subscribers=("${SUBSCRIBERS_SYS[@]}")
+  elif [ "$type" = "pkg" ]; then
+    dir="$SUBS_DIR_PKG"
+    is_pkg=true
+    local subscribers=("${SUBSCRIBERS_PKG[@]}")
+  else
+    fail "Invalid certificate location type: $type"
+  fi
+
+  log_info "Updating ${type} certificate subscribers from $dir"
+
+  for subscriber in "${subscribers[@]}"; do
+    mapfile -t services < <(
+      jq -r --arg D "$CERT_DESC" --arg S "$subscriber" --argjson IS_PKG "$is_pkg" '
+        .[] | select(.desc == $D)
+        | .services[] | select(.isPkg == $IS_PKG and .subscriber == $S)
+        | .service
+      ' <<< "$ARCHIVE_INFO_JSON"
+    )
+
+    for svc in "${services[@]}"; do
+      log_info "Updating ${type} subscriber '${subscriber}' service '${svc}'"
+      copy_cert_files "$ARCHIVE_DIR" "$dir/$subscriber/$svc" false
+      copy_file "$ARCHIVE_DIR/$CHAIN_FILE_NAME_TGT" "$dir/$subscriber/$svc/$SHORTCHAIN_FILE_NAME_TGT"
+      copy_root_cert_from_trust "$ARCHIVE_DIR/$CHAIN_FILE_NAME_TGT" "$dir/$subscriber/$svc/$ROOT_CERT_FILE_NAME_TGT"
+    done
+  done
+}
+
+restart_services() {
+  log_info "Restarting DSM services"
+  run /usr/syno/bin/synow3tool --gen-all
+  run /usr/syno/bin/synow3tool --nginx=reload
+  run /usr/syno/bin/synow3tool --restart-dsm-service
+
+  if netstat -tuln | grep -q ":21 "; then
+    run /usr/syno/bin/synosystemctl restart ftpd
+  else
+    log_info "FTP service does not appear to be listening; skipping ftpd restart"
+  fi
+
+  log_info "DSM service restart completed"
+}
+
+sync_remote_certificates() {
+  local output status
+  local rsync_options=(-ac --itemize-changes)
+  local remote_prefix="${REMOTE_USER}@${REMOTE_HOST}:"
+
+  if [ "$RSYNC_COPY_LINKS" = "true" ]; then
+    rsync_options+=(--copy-links)
+  fi
+
+  log_info "Syncing certificate files from ${REMOTE_HOST}:${REMOTE_BASE_DIR} to ${LOCAL_BASE_DIR}"
+  log_info "Using rsync over SSH command: ${RSYNC_RSH}"
+
+  if [ "$DRY_RUN" = "true" ]; then
+    log_info "Dry run: rsync not executed"
+    RSYNC_OUTPUT=""
+    return 0
+  fi
+
+  set +e
+  output=$(
+    rsync "${rsync_options[@]}" -e "$RSYNC_RSH" \
+      "${remote_prefix}${REMOTE_CERT_PATH}" \
+      "${remote_prefix}${REMOTE_CHAIN_PATH}" \
+      "${remote_prefix}${REMOTE_FULLCHAIN_PATH}" \
+      "${remote_prefix}${REMOTE_KEY_PATH}" \
+      "$LOCAL_BASE_DIR/" 2>&1
+  )
+  status=$?
+  set -e
+
+  if [ -n "$output" ]; then
+    log_info "rsync output:"
+    printf '%s\n' "$output" | while IFS= read -r line; do
+      log_info "  $line"
+    done
+  else
+    log_info "rsync produced no output"
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    log_error "rsync failed with exit code $status"
+    exit "$status"
+  fi
+
+  RSYNC_OUTPUT="$output"
+}
+
+main() {
+  log_info "Starting DSM certificate replication for '${CERT_DESC}'"
+  log_info "Domain: ${DOMAIN}"
+  log_info "Remote source: ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BASE_DIR}"
+  log_info "Local staging: ${LOCAL_BASE_DIR}"
+  log_info "Dry run: ${DRY_RUN}"
+
+  load_archive_info
+  ARCHIVE_ID="$(resolve_archive_id)"
+  readonly ARCHIVE_ID
+
+  ARCHIVE_DIR="${ARCHIVE_BASE_DIR}/${ARCHIVE_ID}"
+  readonly ARCHIVE_DIR
+
+  log_info "Resolved DSM archive ID '${ARCHIVE_ID}' for description '${CERT_DESC}'"
+  require_file "$ARCHIVE_INFO_PATH"
+
+  load_subscribers
+  log_info "System subscribers: {% raw %}${#SUBSCRIBERS_SYS[@]}{% endraw %}"
+  log_info "Package subscribers: {% raw %}${#SUBSCRIBERS_PKG[@]}{% endraw %}"
+
+  build_ssh_command
+  run mkdir -p "$LOCAL_BASE_DIR"
+  sync_remote_certificates
+
+  if [ "$DRY_RUN" = "true" ] || printf '%s\n' "$RSYNC_OUTPUT" | grep -q '^>'; then
+    log_info "Changes detected or dry run requested; updating certificate archive for '${CERT_DESC}'"
+    copy_cert_files "$LOCAL_BASE_DIR" "$ARCHIVE_DIR" true
+    log_info "Certificate archive updated"
+    update_cert_location pkg
+    update_cert_location system
+    log_info "All certificate locations updated for '${CERT_DESC}'"
+    restart_services
+  else
+    log_info "No certificate file changes detected"
+  fi
+
+  log_info "DSM certificate replication completed"
+}
+
+main "$@"

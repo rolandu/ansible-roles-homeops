@@ -5,7 +5,7 @@
     name: "{{ item }}"
     value: "1"
     state: present
-    reload: yes
+    reload: true
   loop:
     - net.ipv4.ip_forward
     - net.ipv4.conf.all.forwarding
@@ -18,7 +18,7 @@
     name: "{{ item }}"
     value: "2"
     state: present
-    reload: yes
+    reload: true
   loop:
     - net.ipv4.conf.all.rp_filter
     - net.ipv4.conf.default.rp_filter

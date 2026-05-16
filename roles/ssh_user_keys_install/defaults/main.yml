@@ -1,0 +1,7 @@
+# roles/ssh_user_keys_install/defaults/main.yml
+
+ssh_user_keys_install_authorized_keys: []
+ssh_user_keys_install_authorized_key_files: []
+
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+ssh_user_keys_install_local_dir: "{{ artifacts_dir }}/ssh_keys"

@@ -17,6 +17,9 @@
         option: DNSStubListener
         value: "yes"
         create: true
+        owner: root
+        group: root
+        mode: "0644"
       register: adguard_resolved_conf_restore
       when: ansible_facts.services['systemd-resolved.service'] is defined
 

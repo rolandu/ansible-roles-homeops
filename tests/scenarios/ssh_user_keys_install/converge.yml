@@ -1,0 +1,19 @@
+---
+- name: Converge ssh_user_keys_install
+  hosts: ssh_user_keys_install_targets
+  gather_facts: false
+
+  vars:
+    # The scenario driver sets this to .ansible-tmp/scenarios/.../artifacts so
+    # controller-side key files are isolated to the test run.
+    artifacts_dir: "{{ lookup('env', 'HOMEOPS_TEST_ARTIFACTS_DIR') }}"
+    # Include the bootstrap controller key so Ansible can reconnect after the
+    # role rewrites authorized_keys.
+    ssh_user_keys_install_authorized_keys:
+      - "{{ lookup('env', 'HOMEOPS_TEST_CONTROLLER_PUBLIC_KEY') }}"
+      - "{{ lookup('env', 'HOMEOPS_TEST_INLINE_PUBLIC_KEY') }}"
+    ssh_user_keys_install_authorized_key_files:
+      - file_key.pub
+
+  roles:
+    - ssh_user_keys_install

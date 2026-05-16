@@ -1,0 +1,20 @@
+---
+- name: Reload nginx
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  notify: Reload nginx service
+
+- name: Reload nginx service
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+
+- name: Restart nginx
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  notify: Restart nginx service
+
+- name: Restart nginx service
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted

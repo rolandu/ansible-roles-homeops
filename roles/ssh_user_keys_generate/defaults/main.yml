@@ -1,0 +1,15 @@
+---
+# roles/ssh_user_keys_generate/defaults/main.yml
+
+ssh_user_keys_generate_key_type: ed25519
+ssh_user_keys_generate_key_filename: id_ed25519
+ssh_user_keys_generate_key_comment: >-
+  {{
+    (ansible_user | default(ansible_user_id | default('user')))
+    + '@'
+    + inventory_hostname
+  }}
+ssh_user_install_basic_ssh_config: true
+
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+ssh_user_keys_generate_local_dir: "{{ artifacts_dir }}/ssh_keys"

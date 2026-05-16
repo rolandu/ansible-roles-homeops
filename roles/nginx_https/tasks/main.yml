@@ -1,0 +1,341 @@
+---
+- name: Validate nginx_https variables
+  ansible.builtin.assert:
+    that:
+      - nginx_user | length > 0
+      - nginx_cert_group | length > 0
+      - nginx_manage_cert_group | type_debug == "bool"
+      - nginx_remove_default_site | type_debug == "bool"
+      - nginx_prune_enabled_sites | type_debug == "bool"
+      - nginx_enable_http_redirect_catchall | type_debug == "bool"
+      - nginx_ssl_protocols | length > 0
+      - nginx_ssl_session_timeout | length > 0
+      - nginx_ssl_session_cache | length > 0
+      - nginx_ssl_session_tickets in ['on', 'off']
+      - nginx_enable_hsts | type_debug == "bool"
+      - nginx_hsts_value | length > 0
+      - nginx_client_max_body_size | length > 0
+      - nginx_verify_sites | type_debug == "bool"
+      - nginx_verify_local_host | length > 0
+      - nginx_verify_timeout | int > 0
+      - nginx_verify_status_codes is sequence
+      - nginx_verify_status_codes | length > 0
+      - nginx_reverse_proxy_sites is sequence
+      - nginx_static_sites is sequence
+    fail_msg: >-
+      nginx_https has invalid base settings. Check defaults, booleans,
+      and certificate paths.
+
+- name: Validate nginx reverse proxy site entries
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.server_name is defined
+      - item.backend is defined
+      - item.ssl_certificate is defined
+      - item.ssl_certificate_key is defined
+      - item.name | string | length > 0
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.server_name | string | length > 0
+      - item.backend | string | length > 0
+      - (item.ssl_certificate | string) is match('^/')
+      - (item.ssl_certificate_key | string) is match('^/')
+      - >-
+        item.websocket is not defined
+        or item.websocket | type_debug == "bool"
+      - >-
+        item.verify is not defined
+        or item.verify | type_debug == "bool"
+      - >-
+        item.verify_path is not defined
+        or item.verify_path is match('^/')
+      - >-
+        item.verify_host is not defined
+        or item.verify_host is not search('\\s')
+      - >-
+        item.verify_timeout is not defined
+        or item.verify_timeout | int > 0
+      - >-
+        item.verify_status_codes is not defined
+        or item.verify_status_codes is sequence
+    fail_msg: >-
+      Each nginx_reverse_proxy_sites entry needs name, server_name, backend,
+      ssl_certificate, and ssl_certificate_key: {{ item }}
+  loop: "{{ nginx_reverse_proxy_sites }}"
+  loop_control:
+    label: "{{ item.name if (item.name is defined) else '<missing-name>' }}"
+
+- name: Validate nginx static site entries
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.server_name is defined
+      - item.root is defined
+      - item.ssl_certificate is defined
+      - item.ssl_certificate_key is defined
+      - item.name | string | length > 0
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.server_name | string | length > 0
+      - (item.root | string) is match('^/')
+      - (item.ssl_certificate | string) is match('^/')
+      - (item.ssl_certificate_key | string) is match('^/')
+      - >-
+        item.verify is not defined
+        or item.verify | type_debug == "bool"
+      - >-
+        item.verify_path is not defined
+        or item.verify_path is match('^/')
+      - >-
+        item.verify_host is not defined
+        or item.verify_host is not search('\\s')
+      - >-
+        item.verify_timeout is not defined
+        or item.verify_timeout | int > 0
+      - >-
+        item.verify_status_codes is not defined
+        or item.verify_status_codes is sequence
+    fail_msg: >-
+      Each nginx_static_sites entry needs name, server_name, root,
+      ssl_certificate, and ssl_certificate_key: {{ item }}
+  loop: "{{ nginx_static_sites }}"
+  loop_control:
+    label: "{{ item.name if (item.name is defined) else '<missing-name>' }}"
+
+- name: Validate nginx site names are unique
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((nginx_reverse_proxy_sites + nginx_static_sites)
+        | map(attribute='name') | list | length)
+        ==
+        ((nginx_reverse_proxy_sites + nginx_static_sites)
+        | map(attribute='name') | list | unique | list | length)
+    fail_msg: >-
+      nginx_reverse_proxy_sites and nginx_static_sites names must be unique.
+
+- name: Reset desired enabled nginx site filenames
+  ansible.builtin.set_fact:
+    nginx_desired_enabled_site_filenames: >-
+      {{
+        (nginx_enable_http_redirect_catchall
+        | ternary(['00-http-redirect.conf'], []))
+      }}
+
+- name: Record desired enabled nginx vhost filenames
+  ansible.builtin.set_fact:
+    nginx_desired_enabled_site_filenames: >-
+      {{ nginx_desired_enabled_site_filenames + [item.name + '.conf'] }}
+  loop: "{{ nginx_reverse_proxy_sites + nginx_static_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Ensure certificate group exists
+  ansible.builtin.group:
+    name: "{{ nginx_cert_group }}"
+    state: present
+  when: nginx_manage_cert_group
+
+- name: Add nginx user to certificate group
+  ansible.builtin.user:
+    name: "{{ nginx_user }}"
+    groups: "{{ nginx_cert_group }}"
+    append: true
+  when: nginx_manage_cert_group
+  notify: Restart nginx
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  when: nginx_remove_default_site
+  notify: Reload nginx
+
+- name: Deploy shared SSL config
+  ansible.builtin.template:
+    src: ssl-common.conf.j2
+    dest: /etc/nginx/snippets/ssl-common.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Deploy shared proxy config
+  ansible.builtin.template:
+    src: proxy-common.conf.j2
+    dest: /etc/nginx/snippets/proxy-common.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Deploy security headers config
+  ansible.builtin.template:
+    src: security-headers.conf.j2
+    dest: /etc/nginx/snippets/security-headers.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Deploy HTTP to HTTPS catch-all
+  ansible.builtin.template:
+    src: 00-http-redirect.conf.j2
+    dest: /etc/nginx/sites-available/00-http-redirect.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when: nginx_enable_http_redirect_catchall
+  notify: Reload nginx
+
+- name: Enable HTTP to HTTPS catch-all
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/00-http-redirect.conf
+    dest: /etc/nginx/sites-enabled/00-http-redirect.conf
+    state: link
+  when: nginx_enable_http_redirect_catchall
+  notify: Reload nginx
+
+- name: Remove disabled HTTP to HTTPS catch-all
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/00-http-redirect.conf
+    - /etc/nginx/sites-available/00-http-redirect.conf
+  when: not nginx_enable_http_redirect_catchall
+  notify: Reload nginx
+
+- name: Remove legacy HTTPS unknown-domain catch-all
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/00-https-catchall.conf
+    - /etc/nginx/sites-available/00-https-catchall.conf
+  notify: Reload nginx
+
+- name: Deploy reverse proxy sites
+  ansible.builtin.template:
+    src: reverse-proxy.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ nginx_reverse_proxy_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload nginx
+
+- name: Find enabled nginx site configs
+  ansible.builtin.find:
+    paths: /etc/nginx/sites-enabled
+    patterns: "*.conf"
+    file_type: any
+  register: nginx_enabled_site_configs
+  when: nginx_prune_enabled_sites
+
+- name: Disable nginx sites not listed in role config
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ nginx_enabled_site_configs.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when:
+    - nginx_prune_enabled_sites
+    - item.path | basename not in nginx_desired_enabled_site_filenames
+  notify: Reload nginx
+
+- name: Enable reverse proxy sites
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+    state: link
+  loop: "{{ nginx_reverse_proxy_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload nginx
+
+- name: Deploy static sites
+  ansible.builtin.template:
+    src: static-site.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ nginx_static_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload nginx
+
+- name: Enable static sites
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+    state: link
+  loop: "{{ nginx_static_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: Reload nginx
+
+- name: Validate pending nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Ensure nginx service is enabled and started before handler flush
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Apply pending nginx configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Validate active nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Ensure nginx service is running after configuration changes
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Gather nginx service facts after configuration
+  ansible.builtin.service_facts:
+
+- name: Verify nginx service is active
+  ansible.builtin.assert:
+    that:
+      - "'nginx.service' in ansible_facts.services"
+      - ansible_facts.services['nginx.service'].state == "running"
+    fail_msg: nginx service is not running after nginx_https configuration.
+
+- name: Verify managed HTTPS sites are reachable locally
+  ansible.builtin.uri:
+    url: >-
+      https://{{ nginx_verify_local_host
+      }}{{ item.verify_path | default('/', true) }}
+    headers:
+      Host: >-
+        {{
+          item.verify_host
+          | default((item.server_name | string).split()[0], true)
+        }}
+    validate_certs: false
+    use_proxy: false
+    follow_redirects: none
+    timeout: "{{ item.verify_timeout | default(nginx_verify_timeout, true) }}"
+    status_code: >-
+      {{ item.verify_status_codes | default(nginx_verify_status_codes, true) }}
+  loop: "{{ nginx_reverse_proxy_sites + nginx_static_sites }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - nginx_verify_sites
+    - item.verify | default(true)

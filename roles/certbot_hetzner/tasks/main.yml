@@ -154,6 +154,9 @@
   ansible.builtin.file:
     path: "{{ certbot_cron_log_file }}"
     state: touch
+    owner: root
+    group: "{{ certbot_shared_group }}"
+    mode: "{{ certbot_file_mode }}"
   when: not certbot_cron_log_stat.stat.exists
 
 - name: Ensure certbot cron log file permissions

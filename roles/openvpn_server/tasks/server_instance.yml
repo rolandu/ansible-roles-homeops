@@ -46,7 +46,10 @@
     that:
       - (ovpn_client.gateway_networks | default([]) | length) > 0
       - (ovpn_client.gateway_networks | default([])) | type_debug == 'list'
-    fail_msg: "Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_networks with at least one entry."
+    fail_msg: >-
+      Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN
+      '{{ openvpn_vpn_name }}' must define gateway_networks with at least one
+      entry.
   loop: "{{ openvpn_clients | selectattr('type', 'equalto', 'gateway') | list }}"
   loop_control:
     loop_var: ovpn_client
@@ -59,21 +62,32 @@
       - ovpn_gateway_network.gateway_network_ip | string | trim | length > 0
       - ovpn_gateway_network.gateway_network_netmask is defined
       - ovpn_gateway_network.gateway_network_netmask | string | trim | length > 0
-    fail_msg: "Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_network_ip and gateway_network_netmask for each gateway_networks entry."
+    fail_msg: >-
+      Gateway client '{{ ovpn_client.name | default('unnamed') }}' in VPN
+      '{{ openvpn_vpn_name }}' must define gateway_network_ip and
+      gateway_network_netmask for each gateway_networks entry.
   vars:
     ovpn_client: "{{ ovpn_gateway_pair.0 }}"
     ovpn_gateway_network: "{{ ovpn_gateway_pair.1 }}"
-  loop: "{{ (openvpn_clients | selectattr('type', 'equalto', 'gateway') | list) | subelements('gateway_networks', skip_missing=True) }}"
+  loop: >-
+    {{
+      (openvpn_clients | selectattr('type', 'equalto', 'gateway') | list)
+      | subelements('gateway_networks', skip_missing=True)
+    }}
   loop_control:
     loop_var: ovpn_gateway_pair
-    label: "{{ ovpn_gateway_pair.0.name | default('unnamed') }} -> {{ ovpn_gateway_pair.1.gateway_network_ip | default('undefined') }}"
+    label: >-
+      {{ ovpn_gateway_pair.0.name | default('unnamed') }} ->
+      {{ ovpn_gateway_pair.1.gateway_network_ip | default('undefined') }}
 
 - name: Validate local ignore networks are list ({{ openvpn_vpn_name }})
   when: ovpn_client.local_ignore_networks is defined
   assert:
     that:
       - (ovpn_client.local_ignore_networks | default([])) | type_debug == 'list'
-    fail_msg: "Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define local_ignore_networks as a list."
+    fail_msg: >-
+      Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN
+      '{{ openvpn_vpn_name }}' must define local_ignore_networks as a list.
   loop: "{{ openvpn_clients | selectattr('type', 'equalto', 'local') | list }}"
   loop_control:
     loop_var: ovpn_client
@@ -86,14 +100,23 @@
       - ovpn_local_network.gateway_network_ip | string | trim | length > 0
       - ovpn_local_network.gateway_network_netmask is defined
       - ovpn_local_network.gateway_network_netmask | string | trim | length > 0
-    fail_msg: "Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN '{{ openvpn_vpn_name }}' must define gateway_network_ip and gateway_network_netmask for each local_ignore_networks entry."
+    fail_msg: >-
+      Local client '{{ ovpn_client.name | default('unnamed') }}' in VPN
+      '{{ openvpn_vpn_name }}' must define gateway_network_ip and
+      gateway_network_netmask for each local_ignore_networks entry.
   vars:
     ovpn_client: "{{ ovpn_local_pair.0 }}"
     ovpn_local_network: "{{ ovpn_local_pair.1 }}"
-  loop: "{{ (openvpn_clients | selectattr('type', 'equalto', 'local') | list) | subelements('local_ignore_networks', skip_missing=True) }}"
+  loop: >-
+    {{
+      (openvpn_clients | selectattr('type', 'equalto', 'local') | list)
+      | subelements('local_ignore_networks', skip_missing=True)
+    }}
   loop_control:
     loop_var: ovpn_local_pair
-    label: "{{ ovpn_local_pair.0.name | default('unnamed') }} -> {{ ovpn_local_pair.1.gateway_network_ip | default('undefined') }}"
+    label: >-
+      {{ ovpn_local_pair.0.name | default('unnamed') }} ->
+      {{ ovpn_local_pair.1.gateway_network_ip | default('undefined') }}
 
 - name: Set protocol-derived facts ({{ openvpn_vpn_name }})
   set_fact:
@@ -131,15 +154,15 @@
 - name: Ensure OpenVPN group exists ({{ openvpn_vpn_name }})
   group:
     name: openvpn
-    system: yes
+    system: true
   notify: Restart OpenVPN server instance
 
 - name: Ensure OpenVPN user exists ({{ openvpn_vpn_name }})
   user:
     name: openvpn
     group: openvpn
-    system: yes
-    create_home: no
+    system: true
+    create_home: false
     shell: /usr/sbin/nologin
     state: present
   notify: Restart OpenVPN server instance
@@ -152,7 +175,7 @@
           - openvpn
           - easy-rsa
         state: present
-        update_cache: yes
+        update_cache: true
 
     - name: Create EasyRSA directory ({{ openvpn_vpn_name }})
       file:
@@ -167,7 +190,7 @@
         owner: root
         group: root
         mode: "0750"
-        remote_src: yes
+        remote_src: true
 
 - name: Initialize PKI if not already present ({{ openvpn_vpn_name }})
   command: ./easyrsa init-pki
@@ -316,14 +339,20 @@
     owner: openvpn
     group: openvpn
     mode: "u=rw,g=rw,o="
-    remote_src: yes
+    remote_src: true
   loop:
-    - { src: "{{ easyrsa_dir }}/pki/ca.crt", dest: "ca.crt" }
-    - { src: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_vpn_name }}.crt", dest: "server.crt" }
-    - { src: "{{ easyrsa_dir }}/pki/private/{{ openvpn_vpn_name }}.key", dest: "server.key" }
-    - { src: "{{ easyrsa_dir }}/pki/dh.pem", dest: "dh.pem" }
-    - { src: "{{ easyrsa_dir }}/ta.key", dest: "ta.key" }
-    - { src: "{{ easyrsa_dir }}/pki/crl.pem", dest: "crl.pem" }
+    - src: "{{ easyrsa_dir }}/pki/ca.crt"
+      dest: "ca.crt"
+    - src: "{{ easyrsa_dir }}/pki/issued/{{ openvpn_vpn_name }}.crt"
+      dest: "server.crt"
+    - src: "{{ easyrsa_dir }}/pki/private/{{ openvpn_vpn_name }}.key"
+      dest: "server.key"
+    - src: "{{ easyrsa_dir }}/pki/dh.pem"
+      dest: "dh.pem"
+    - src: "{{ easyrsa_dir }}/ta.key"
+      dest: "ta.key"
+    - src: "{{ easyrsa_dir }}/pki/crl.pem"
+      dest: "crl.pem"
   notify: Restart OpenVPN server instance
 
 - name: Deploy OpenVPN server configuration ({{ openvpn_vpn_name }})
@@ -340,7 +369,7 @@
     name: "{{ item }}"
     value: "1"
     state: present
-    reload: yes
+    reload: true
   loop:
     - net.ipv4.ip_forward
     - net.ipv4.conf.all.forwarding
@@ -352,7 +381,7 @@
     name: "{{ item }}"
     value: "2"
     state: present
-    reload: yes
+    reload: true
   loop:
     - net.ipv4.conf.all.rp_filter
     - net.ipv4.conf.default.rp_filter
@@ -364,10 +393,10 @@
     name: net.ipv6.bindv6only
     value: "0"
     state: present
-    reload: yes
+    reload: true
   notify: Restart OpenVPN server instance
 
-- name: Verify OpenVPN service is active ({{ openvpn_vpn_name }})
+- name: Verify OpenVPN service is active ({{ openvpn_vpn_name }})  # noqa: command-instead-of-module
   command: "systemctl is-active openvpn-server@{{ openvpn_vpn_name }}"
   register: openvpn_service_status
   changed_when: false
@@ -405,7 +434,7 @@
     owner: openvpn
     group: openvpn
     mode: "o="
-    recurse: yes
+    recurse: true
   notify: Restart OpenVPN server instance
   loop:
     - "{{ openvpn_server_dir }}"
@@ -416,7 +445,7 @@
 - name: Enable and start OpenVPN service ({{ openvpn_vpn_name }})
   service:
     name: "openvpn-server@{{ openvpn_vpn_name }}"
-    enabled: yes
+    enabled: true
     state: started
 
 - name: Flush handlers for this VPN instance ({{ openvpn_vpn_name }})

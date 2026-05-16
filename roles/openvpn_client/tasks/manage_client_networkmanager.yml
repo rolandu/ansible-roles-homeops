@@ -37,11 +37,12 @@
   apt:
     name: network-manager-openvpn
     state: present
-    update_cache: yes
+    update_cache: true
   when: not openvpn_client_nm_plugin_installed | bool
   register: openvpn_client_nm_plugin
 
-- name: Reload NetworkManager after plugin install
+# NetworkManager must see the newly installed plugin before importing the VPN.
+- name: Reload NetworkManager after plugin install # noqa: no-handler
   when: openvpn_client_nm_plugin is changed
   command: nmcli general reload
   changed_when: false
@@ -82,7 +83,9 @@
     openvpn_client_nm_connection_exists: >-
       {{ openvpn_client_connection_name in openvpn_client_nm_connections.stdout_lines }}
 
-- name: Drop existing connection when config changed
+# The old connection must be removed immediately so the following import and
+# assertion operate on the current generated config.
+- name: Drop existing connection when config changed # noqa: no-handler
   when:
     - openvpn_client_config_copy.changed
     - openvpn_client_nm_connection_exists | bool
@@ -90,7 +93,9 @@
   register: openvpn_client_nm_delete
   changed_when: openvpn_client_nm_delete.rc == 0
 
-- name: Import OpenVPN connection into NetworkManager
+# Import must happen immediately so subsequent modification, assertion, and
+# connection activation tasks target a real NetworkManager connection.
+- name: Import OpenVPN connection into NetworkManager # noqa: no-handler
   when: openvpn_client_config_copy.changed or (not openvpn_client_nm_connection_exists | bool)
   command: >-
     nmcli connection import type openvpn
@@ -123,10 +128,10 @@
 
 # networkmanager has a strange behavior: it sets the default route through
 # the VPN connection even for split-tunnel configs, even if the VPN doesn't
-# push a default route. To work around this, we need to explicitly tell 
+# push a default route. To work around this, we need to explicitly tell
 # NetworkManager not set a default route for split-tunnel configs.
 #
-# In addition, gateway clients must never set a default route through the VPN, 
+# In addition, gateway clients must never set a default route through the VPN,
 # even if the server pushes one, since that would break connectivity for the
 # local network that the gateway is supposed to be providing access to.
 - name: Disable VPN default route for split-tunnel configs

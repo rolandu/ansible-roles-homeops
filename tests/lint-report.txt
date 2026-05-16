@@ -1,0 +1,28 @@
+Ansible lint report
+Generated: 2026-05-02T19:23:16+02:00
+Repository: /home/roland/Code/Ops/ansible-roles-homeops
+
+
+=== ansible-lint: adguardhome_docker ===
+Path: roles/adguardhome_docker
+
+=== ansible-lint: certbot_hetzner ===
+Path: roles/certbot_hetzner
+
+=== ansible-lint: openvpn_client ===
+Path: roles/openvpn_client
+
+=== ansible-lint: openvpn_server ===
+Path: roles/openvpn_server
+
+=== ansible-lint: ssh_user_keys_generate ===
+Path: roles/ssh_user_keys_generate
+
+=== ansible-lint: ssh_user_keys_install ===
+Path: roles/ssh_user_keys_install
+
+=== ansible-lint: ssh_users ===
+Path: roles/ssh_users
+
+=== ansible-lint: update_debian_ubuntu ===
+Path: roles/update_debian_ubuntu

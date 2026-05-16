@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: rolandu
+  description: Install authorized keys for the current SSH connection user.
+  license: MIT
+  min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []

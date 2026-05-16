@@ -2,6 +2,8 @@
 
 Deploy AdGuard Home with Docker Compose (host networking), render an `AdGuardHome.yaml`, and (optionally) run a local DNS test against `127.0.0.1:53`.
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Role Variables
 
 - `adguard_admin_password_bcrypt` (string, required): bcrypt hash for the admin user (role fails if empty).
@@ -62,4 +64,3 @@ Teardown example (stop containers, restore systemd-resolved stub):
 ```bash
 ansible-playbook <playbook>.yml -l <host> -e adguard_teardown=true
 ```
-

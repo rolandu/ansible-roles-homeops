@@ -1,0 +1,160 @@
+---
+- name: Verify ssh_users
+  hosts: ssh_users_targets
+  gather_facts: false
+  become: true
+
+  vars:
+    generated_public_key_artifact: "{{ lookup('env', 'HOMEOPS_TEST_ARTIFACTS_DIR') }}/ssh_keys/homeops_test_user@ssh-users-target.pub"
+    expected_inline_authorized_key: "{{ lookup('env', 'HOMEOPS_TEST_INLINE_PUBLIC_KEY') }}"
+    expected_file_authorized_key: "{{ lookup('env', 'HOMEOPS_TEST_FILE_PUBLIC_KEY') }}"
+
+  tasks:
+    - name: Verify declared group certificates exists for extra_groups membership
+      ansible.builtin.command:
+        argv:
+          - getent
+          - group
+          - certificates
+      register: certificates_group
+      changed_when: false
+
+    - name: Verify explicitly absent group homeops_absent_group was removed
+      ansible.builtin.command:
+        argv:
+          - getent
+          - group
+          - homeops_absent_group
+      register: absent_group
+      changed_when: false
+      failed_when: false
+
+    - name: Verify unrelated group homeops_unrelated_group was left untouched
+      ansible.builtin.command:
+        argv:
+          - getent
+          - group
+          - homeops_unrelated_group
+      register: unrelated_group
+      changed_when: false
+
+    - name: Verify managed account homeops_test_user exists before file checks
+      ansible.builtin.command:
+        argv:
+          - getent
+          - passwd
+          - homeops_test_user
+      register: managed_user
+      changed_when: false
+
+    - name: Verify managed account homeops_test_user joined certificates
+      ansible.builtin.command:
+        argv:
+          - id
+          - -nG
+          - homeops_test_user
+      register: managed_user_groups
+      changed_when: false
+
+    - name: Verify generated private key exists with restrictive permissions
+      ansible.builtin.stat:
+        path: /home/homeops_test_user/.ssh/id_homeops_full_ed25519
+      register: generated_private_key_stat
+
+    - name: Verify generated public key exists beside the private key
+      ansible.builtin.stat:
+        path: /home/homeops_test_user/.ssh/id_homeops_full_ed25519.pub
+      register: generated_public_key_stat
+
+    - name: Verify basic SSH config was created for generated key
+      ansible.builtin.stat:
+        path: /home/homeops_test_user/.ssh/config
+      register: ssh_config_stat
+
+    - name: Read basic SSH config for generated key
+      ansible.builtin.slurp:
+        src: /home/homeops_test_user/.ssh/config
+      register: ssh_config_file
+
+    - name: Read generated public key from the managed account home directory
+      ansible.builtin.slurp:
+        src: /home/homeops_test_user/.ssh/id_homeops_full_ed25519.pub
+      register: generated_public_key_remote
+
+    - name: Verify generated public key was exported to controller artifacts
+      ansible.builtin.stat:
+        path: "{{ generated_public_key_artifact }}"
+      delegate_to: localhost
+      become: false
+      register: generated_public_key_artifact_stat
+
+    - name: Read exported generated public key from controller artifacts
+      ansible.builtin.slurp:
+        src: "{{ generated_public_key_artifact }}"
+      delegate_to: localhost
+      become: false
+      register: generated_public_key_artifact_file
+
+    - name: Verify authorized_keys was written for the managed account
+      ansible.builtin.stat:
+        path: /home/homeops_test_user/.ssh/authorized_keys
+      register: authorized_keys_stat
+
+    - name: Read authorized_keys for exact inline file and generated key checks
+      ansible.builtin.slurp:
+        src: /home/homeops_test_user/.ssh/authorized_keys
+      register: authorized_keys_file
+
+    - name: Verify sshd hardening effective configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sshd
+          - -T
+      register: sshd_effective_config
+      changed_when: false
+
+    - name: Assert full ssh_users role behavior
+      ansible.builtin.assert:
+        that:
+          - certificates_group.rc == 0
+          - absent_group.rc != 0
+          - unrelated_group.rc == 0
+          - managed_user.rc == 0
+          - "'certificates' in managed_user_groups.stdout.split()"
+          - generated_private_key_stat.stat.exists
+          - generated_private_key_stat.stat.pw_name == 'homeops_test_user'
+          - generated_private_key_stat.stat.gr_name == 'homeops_test_user'
+          - generated_private_key_stat.stat.mode == '0600'
+          - generated_public_key_stat.stat.exists
+          - generated_public_key_stat.stat.pw_name == 'homeops_test_user'
+          - generated_public_key_stat.stat.gr_name == 'homeops_test_user'
+          - generated_public_key_stat.stat.mode == '0644'
+          - ssh_config_stat.stat.exists
+          - ssh_config_stat.stat.pw_name == 'homeops_test_user'
+          - ssh_config_stat.stat.gr_name == 'homeops_test_user'
+          - ssh_config_stat.stat.mode == '0600'
+          - ssh_config_text == expected_ssh_config
+          - generated_public_key_remote_text is search('homeops-test-generated@ssh-users-target')
+          - generated_public_key_artifact_stat.stat.exists
+          - generated_public_key_artifact_text == generated_public_key_remote_text
+          - authorized_keys_stat.stat.exists
+          - authorized_keys_stat.stat.pw_name == 'homeops_test_user'
+          - authorized_keys_stat.stat.gr_name == 'homeops_test_user'
+          - authorized_keys_stat.stat.mode == '0600'
+          - authorized_keys_text == expected_authorized_keys | join('\n')
+          - "'passwordauthentication no' in sshd_effective_config.stdout_lines"
+          - "'permitrootlogin no' in sshd_effective_config.stdout_lines"
+          - "'pubkeyauthentication yes' in sshd_effective_config.stdout_lines"
+        success_msg: "ssh_users managed groups, user, generated keys, authorized_keys, and SSH hardening as expected."
+      vars:
+        generated_public_key_remote_text: "{{ generated_public_key_remote.content | b64decode | trim }}"
+        generated_public_key_artifact_text: "{{ generated_public_key_artifact_file.content | b64decode | trim }}"
+        authorized_keys_text: "{{ authorized_keys_file.content | b64decode | trim }}"
+        ssh_config_text: "{{ ssh_config_file.content | b64decode | trim }}"
+        expected_ssh_config: |-
+          Host *
+            IdentityFile ~/.ssh/id_homeops_full_ed25519
+        expected_authorized_keys:
+          - "{{ expected_inline_authorized_key }}"
+          - "{{ expected_file_authorized_key }}"
+          - "{{ generated_public_key_remote_text }}"

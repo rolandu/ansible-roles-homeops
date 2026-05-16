@@ -2,6 +2,8 @@
 
 Install and configure an OpenVPN client from exported inline `.ovpn` profiles. This role depends on the server role’s `openvpn_config` and the exported bundles it produces. See the server role for shared schema and server-side behavior: [openvpn_server](../openvpn_server/README.md).
 
+**This is an administrative role and it assumes privileged execution (`become: true`) works on the target host.**
+
 ## Variables
 
 - `openvpn_config` (list, required): same structure used by the server role. Each VPN entry’s `clients` list drives which hosts are managed here, including `prefer_vpn_dns` (bool, default `true`) to control whether pushed DNS is preferred.

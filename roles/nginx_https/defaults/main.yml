@@ -1,0 +1,34 @@
+---
+nginx_user: www-data
+nginx_cert_group: certificates
+nginx_manage_cert_group: true
+
+nginx_remove_default_site: true
+nginx_prune_enabled_sites: true
+nginx_enable_http_redirect_catchall: true
+
+nginx_ssl_protocols: "TLSv1.2 TLSv1.3"
+nginx_ssl_session_timeout: 1d
+nginx_ssl_session_cache: "shared:SSL:10m"
+nginx_ssl_session_tickets: "off"
+
+nginx_enable_hsts: false
+nginx_hsts_value: "max-age=31536000"
+
+nginx_client_max_body_size: 25m
+
+nginx_verify_sites: true
+nginx_verify_local_host: 127.0.0.1
+nginx_verify_timeout: 10
+nginx_verify_status_codes:
+  - 200
+  - 204
+  - 301
+  - 302
+  - 307
+  - 308
+  - 401
+  - 403
+
+nginx_reverse_proxy_sites: []
+nginx_static_sites: []
