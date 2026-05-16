@@ -1,10 +1,13 @@
+---
 namespace: rolandu
 name: homeops
 version: 0.1.0
 readme: README.md
 authors:
   - rolandu
-description: Ansible roles for home/family infrastructure (VPN, SSH users, certificates, Certbot/Hetzner DNS).
+description: >-
+  Ansible roles for home/family infrastructure (VPN, SSH users, certificates,
+  Certbot/Hetzner DNS, nginx).
 license:
   - MIT
 tags:
@@ -15,7 +18,9 @@ tags:
   - certbot
   - certificates
   - hetzner
+  - nginx
 dependencies: {}
 repository: https://github.com/rolandu/ansible-roles-homeops
-documentation: https://github.com/rolandu/ansible-roles-homeops/blob/main/README.md
+documentation: >-
+  https://github.com/rolandu/ansible-roles-homeops/blob/main/README.md
 issues: https://github.com/rolandu/ansible-roles-homeops/issues
