@@ -14,6 +14,7 @@ openvpn_default_mgmt_port: 7505
 openvpn_default_mgmt_bind: "127.0.0.1"
 openvpn_default_dns_servers: []
 openvpn_default_dns_domain: "."
+openvpn_force_restart_after_run: false
 
 # Local controller path for exported artifacts
 artifacts_dir: "{{ inventory_dir }}/artifacts"
