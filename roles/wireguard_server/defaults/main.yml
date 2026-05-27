@@ -1,0 +1,49 @@
+---
+wireguard_interface: wg0
+wireguard_network_name: home
+wireguard_port: 51820
+wireguard_endpoint: ""
+
+wireguard_config_dir: /etc/wireguard
+wireguard_key_dir: "{{ wireguard_config_dir }}/keys"
+
+wireguard_interface_addresses:
+  - 10.100.0.1/24
+
+wireguard_enable_ipv4_forwarding: true
+wireguard_enable_ipv6_forwarding: true
+
+wireguard_save_config: false
+wireguard_manage_service: true
+
+wireguard_packages:
+  - wireguard
+  - wireguard-tools
+
+# Peer keys are generated and preserved on the VPN server for operational
+# simplicity. Existing key files are never regenerated unless manually removed.
+wireguard_generate_peer_keys_on_server: true
+
+wireguard_generate_client_configs: true
+wireguard_client_config_dir: /opt/wireguard-clients
+wireguard_client_config_generate_qr: true
+wireguard_client_config_fetch_to_controller: true
+
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+wireguard_client_config_local_dir_base: "{{ artifacts_dir }}/wireguard-clients"
+wireguard_client_config_local_dir: >-
+  {{ wireguard_client_config_local_dir_base }}/{{ wireguard_network_name }}
+
+wireguard_dns: ""
+wireguard_persistent_keepalive: 25
+
+wireguard_client_config_packages:
+  - qrencode
+
+wireguard_peers: []
+# Example:
+# wireguard_peers:
+#   - name: phone
+#     addresses:
+#       - 10.100.0.2/32
+#     client_allowed_ips: "0.0.0.0/0"

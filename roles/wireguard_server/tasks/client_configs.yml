@@ -1,0 +1,112 @@
+---
+- name: Ensure client config directory exists
+  ansible.builtin.file:
+    path: "{{ wireguard_client_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Read server public key for client configs
+  ansible.builtin.slurp:
+    src: "{{ wireguard_key_dir }}/server_public.key"
+  register: wireguard_client_config_server_public_key_file
+
+- name: Read peer private keys for client configs
+  ansible.builtin.slurp:
+    src: "{{ wireguard_key_dir }}/peer_{{ item.name }}_private.key"
+  register: wireguard_client_config_peer_private_key_files
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Generate client configuration files
+  ansible.builtin.template:
+    src: client.conf.j2
+    dest: "{{ wireguard_client_config_dir }}/{{ item.item.name }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ wireguard_client_config_peer_private_key_files.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+
+- name: Stat client configuration files
+  ansible.builtin.stat:
+    path: "{{ wireguard_client_config_dir }}/{{ item.name }}.conf"
+  register: wireguard_client_config_file_stats
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: wireguard_client_config_generate_qr | bool
+
+- name: Stat QR code text files
+  ansible.builtin.stat:
+    path: "{{ wireguard_client_config_dir }}/{{ item.name }}_qr.txt"
+  register: wireguard_client_config_qr_file_stats
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: wireguard_client_config_generate_qr | bool
+
+- name: Generate QR code text files
+  ansible.builtin.command:
+    argv:
+      - qrencode
+      - -t
+      - ansiutf8
+      - -r
+      - "{{ wireguard_client_config_dir }}/{{ item.name }}.conf"
+      - -o
+      - "{{ wireguard_client_config_dir }}/{{ item.name }}_qr.txt"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    index_var: wireguard_peer_index
+    label: "{{ item.name }}"
+  when:
+    - wireguard_client_config_generate_qr | bool
+    - >-
+      not wireguard_client_config_qr_file_stats.results[wireguard_peer_index].stat.exists or
+      (
+        wireguard_client_config_file_stats.results[wireguard_peer_index].stat.mtime >
+        wireguard_client_config_qr_file_stats.results[wireguard_peer_index].stat.mtime
+      )
+  changed_when: true
+
+- name: Restrict QR code text file permissions
+  ansible.builtin.file:
+    path: "{{ wireguard_client_config_dir }}/{{ item.name }}_qr.txt"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: wireguard_client_config_generate_qr | bool
+
+- name: Fetch client config files to controller
+  ansible.builtin.fetch:
+    src: "{{ wireguard_client_config_dir }}/{{ item.name }}.conf"
+    dest: "{{ wireguard_client_config_local_dir }}/"
+    flat: true
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: wireguard_client_config_fetch_to_controller | bool
+  no_log: true
+
+- name: Fetch QR code text files to controller
+  ansible.builtin.fetch:
+    src: "{{ wireguard_client_config_dir }}/{{ item.name }}_qr.txt"
+    dest: "{{ wireguard_client_config_local_dir }}/"
+    flat: true
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - wireguard_client_config_fetch_to_controller | bool
+    - wireguard_client_config_generate_qr | bool
+  no_log: true

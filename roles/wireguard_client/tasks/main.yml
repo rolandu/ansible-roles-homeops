@@ -1,0 +1,60 @@
+---
+- name: Validate WireGuard client settings
+  ansible.builtin.assert:
+    that:
+      - wireguard_interface is match('^[A-Za-z0-9_.-]+$')
+      - wireguard_network_name is match('^[A-Za-z0-9_.-]+$')
+      - wireguard_client_name is match('^[A-Za-z0-9_.-]+$')
+      - wireguard_client_source_config | string | trim | length > 0
+    fail_msg: >-
+      Set safe wireguard_interface, wireguard_network_name, and
+      wireguard_client_name values. wireguard_client_name must match a peer
+      exported by wireguard_server.
+
+- name: Check generated client config exists on controller
+  ansible.builtin.stat:
+    path: "{{ wireguard_client_source_config }}"
+  register: wireguard_client_source_config_stat
+  delegate_to: localhost
+  become: false
+
+- name: Fail when generated client config is missing
+  ansible.builtin.fail:
+    msg: >-
+      Generated WireGuard client config not found on the controller:
+      {{ wireguard_client_source_config }}. Run wireguard_server with
+      wireguard_client_config_fetch_to_controller enabled, or set
+      wireguard_client_source_config to the correct file.
+  when: not wireguard_client_source_config_stat.stat.exists
+
+- name: Install WireGuard client packages
+  ansible.builtin.apt:
+    name: "{{ wireguard_client_packages + wireguard_client_dns_helper_packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Ensure WireGuard config directory exists
+  ansible.builtin.file:
+    path: "{{ wireguard_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install WireGuard client config
+  ansible.builtin.copy:
+    src: "{{ wireguard_client_source_config }}"
+    dest: "{{ wireguard_client_config_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart wireguard client
+  no_log: true
+
+- name: Enable and start WireGuard client
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wireguard_interface }}"
+    enabled: true
+    state: started
+  when: wireguard_client_manage_service | bool
