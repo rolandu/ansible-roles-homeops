@@ -1,0 +1,178 @@
+---
+- name: Validate WireGuard interface settings
+  ansible.builtin.assert:
+    that:
+      - wireguard_interface is match('^[A-Za-z0-9_.-]+$')
+      - wireguard_network_name is match('^[A-Za-z0-9_.-]+$')
+      - wireguard_port | int > 0
+      - wireguard_port | int <= 65535
+      - wireguard_interface_addresses | length > 0
+    fail_msg: >-
+      Set a safe wireguard_interface/network name, a valid wireguard_port, and
+      at least one WireGuard interface address.
+
+- name: Validate endpoint for generated client configs
+  ansible.builtin.assert:
+    that:
+      - wireguard_endpoint is defined
+      - wireguard_endpoint | string | trim | length > 0
+      - wireguard_generate_peer_keys_on_server | bool
+    fail_msg: >-
+      wireguard_endpoint must be set to the public DNS name or public IP used
+      by clients when wireguard_generate_client_configs is enabled. Client
+      config generation also requires wireguard_generate_peer_keys_on_server.
+  when:
+    - wireguard_generate_client_configs | bool
+    - wireguard_peers | length > 0
+
+- name: Validate WireGuard peer definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.addresses is defined
+      - item.addresses | length > 0
+      - wireguard_generate_peer_keys_on_server | bool or item.public_key is defined
+      - not wireguard_generate_client_configs | bool or item.client_allowed_ips is defined
+      - >-
+        not wireguard_generate_client_configs | bool or
+        item.client_allowed_ips | string | trim | length > 0
+    fail_msg: >-
+      Each WireGuard peer needs a safe name and at least one tunnel address.
+      If server-side peer key generation is disabled, public_key is required.
+      If client config generation is enabled, client_allowed_ips is required.
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed-peer') }}"
+
+- name: Install WireGuard packages
+  ansible.builtin.apt:
+    name: "{{ wireguard_packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Install QR code package
+  ansible.builtin.apt:
+    name: "{{ wireguard_client_config_packages }}"
+    state: present
+    update_cache: true
+  when:
+    - ansible_os_family == "Debian"
+    - wireguard_generate_client_configs | bool
+    - wireguard_client_config_generate_qr | bool
+    - wireguard_peers | length > 0
+
+- name: Ensure WireGuard config directory exists
+  ansible.builtin.file:
+    path: "{{ wireguard_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Ensure WireGuard key directory exists
+  ansible.builtin.file:
+    path: "{{ wireguard_key_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Enable IPv4 forwarding
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+  when: wireguard_enable_ipv4_forwarding | bool
+
+- name: Enable IPv6 forwarding
+  ansible.builtin.sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+  when: wireguard_enable_ipv6_forwarding | bool
+
+- name: Generate server private key if missing
+  ansible.builtin.shell:
+    cmd: >-
+      umask 077 && wg genkey >
+      {{ (wireguard_key_dir ~ '/server_private.key') | quote }}
+    creates: "{{ wireguard_key_dir }}/server_private.key"
+  no_log: true
+
+- name: Enforce server private key permissions
+  ansible.builtin.file:
+    path: "{{ wireguard_key_dir }}/server_private.key"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Read server private key
+  ansible.builtin.slurp:
+    src: "{{ wireguard_key_dir }}/server_private.key"
+  register: wireguard_server_private_key_file
+  no_log: true
+
+- name: Generate server public key
+  ansible.builtin.command:
+    cmd: wg pubkey
+    stdin: "{{ wireguard_server_private_key_file.content | b64decode | trim }}"
+  register: wireguard_server_public_key_result
+  changed_when: false
+  no_log: true
+
+- name: Save server public key
+  ansible.builtin.copy:
+    content: "{{ wireguard_server_public_key_result.stdout }}\n"
+    dest: "{{ wireguard_key_dir }}/server_public.key"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Manage peer keys
+  ansible.builtin.include_tasks: peer_keys.yml
+  when: wireguard_generate_peer_keys_on_server | bool
+
+- name: Build peer public key map from provided keys
+  ansible.builtin.set_fact:
+    wireguard_peer_public_keys: >-
+      {{
+        wireguard_peer_public_keys | default({}) |
+        combine({ item.name: item.public_key })
+      }}
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - not wireguard_generate_peer_keys_on_server | bool
+    - item.public_key is defined
+
+- name: Deploy WireGuard server config
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "{{ wireguard_config_dir }}/{{ wireguard_interface }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: restart wireguard
+  no_log: true
+
+- name: Generate and export WireGuard client configs
+  ansible.builtin.include_tasks: client_configs.yml
+  when:
+    - wireguard_generate_client_configs | bool
+    - wireguard_peers | length > 0
+
+- name: Enable and start WireGuard
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wireguard_interface }}"
+    enabled: true
+    state: started
+  when: wireguard_manage_service | bool

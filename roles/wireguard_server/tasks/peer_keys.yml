@@ -1,0 +1,66 @@
+---
+- name: Generate peer private keys if missing
+  ansible.builtin.shell:
+    cmd: >-
+      umask 077 && wg genkey >
+      {{ (wireguard_key_dir ~ '/peer_' ~ item.name ~ '_private.key') | quote }}
+    creates: "{{ wireguard_key_dir }}/peer_{{ item.name }}_private.key"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Enforce peer private key permissions
+  ansible.builtin.file:
+    path: "{{ wireguard_key_dir }}/peer_{{ item.name }}_private.key"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Read peer private keys
+  ansible.builtin.slurp:
+    src: "{{ wireguard_key_dir }}/peer_{{ item.name }}_private.key"
+  register: wireguard_peer_private_key_files
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Generate peer public keys
+  ansible.builtin.command:
+    cmd: wg pubkey
+    stdin: "{{ item.content | b64decode | trim }}"
+  register: wireguard_peer_public_key_results
+  loop: "{{ wireguard_peer_private_key_files.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  changed_when: false
+  no_log: true
+
+- name: Build peer public key map
+  ansible.builtin.set_fact:
+    wireguard_peer_public_keys: >-
+      {{
+        wireguard_peer_public_keys | default({}) |
+        combine({ item.item.item.name: item.stdout })
+      }}
+  loop: "{{ wireguard_peer_public_key_results.results }}"
+  loop_control:
+    label: "{{ item.item.item.name }}"
+  no_log: true
+
+- name: Save peer public keys
+  ansible.builtin.copy:
+    content: "{{ item.stdout }}\n"
+    dest: "{{ wireguard_key_dir }}/peer_{{ item.item.item.name }}_public.key"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ wireguard_peer_public_key_results.results }}"
+  loop_control:
+    label: "{{ item.item.item.name }}"

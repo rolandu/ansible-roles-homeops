@@ -1,5 +1,26 @@
 ---
-- name: Restart OpenVPN server instance
-  service:
-    name: "openvpn-server@{{ openvpn_vpn_name }}"
-    state: restarted
+# Handlers for OpenVPN server instance management
+- name: Queue OpenVPN server instance restart  # noqa: command-instead-of-module
+  listen: Restart OpenVPN server instance
+  when: not ansible_check_mode
+  ansible.builtin.shell: |
+    sleep 3
+    systemctl restart "openvpn-server@{{ openvpn_vpn_name }}"
+  async: 120
+  poll: 0
+  changed_when: true
+
+# Drop any stale SSH control connection before the delayed restart lands.
+- name: Reset Ansible connection after OpenVPN server restart
+  listen: Restart OpenVPN server instance
+  ansible.builtin.meta: reset_connection
+
+# Continue only after Ansible can connect again.
+- name: Wait for Ansible connection after OpenVPN server restart
+  listen: Restart OpenVPN server instance
+  when: not ansible_check_mode
+  ansible.builtin.wait_for_connection:
+    connect_timeout: 10   # Time to wait for the connection to be established before giving up
+    delay: 3      # Initial delay before starting connection attempts
+    sleep: 5      # Wait 5 seconds between connection attempts
+    timeout: 600  # Wait up to 10 minutes for the connection to be re-established

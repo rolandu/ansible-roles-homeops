@@ -1,0 +1,19 @@
+# Managed by Ansible. Do not edit manually.
+# Client: {{ item.item.name }}
+
+[Interface]
+PrivateKey = {{ item.content | b64decode | trim }}
+Address = {{ item.item.addresses | join(', ') }}
+{% set client_dns = item.item.dns | default(wireguard_dns) %}
+{% if client_dns | string | length > 0 %}
+DNS = {{ client_dns }}
+{% endif %}
+
+[Peer]
+PublicKey = {{ wireguard_client_config_server_public_key_file.content | b64decode | trim }}
+Endpoint = {{ wireguard_endpoint }}:{{ wireguard_port }}
+AllowedIPs = {{ item.item.client_allowed_ips }}
+{% set keepalive = item.item.persistent_keepalive | default(wireguard_persistent_keepalive) %}
+{% if keepalive is not none %}
+PersistentKeepalive = {{ keepalive }}
+{% endif %}

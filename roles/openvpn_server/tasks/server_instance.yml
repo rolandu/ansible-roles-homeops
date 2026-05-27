@@ -448,11 +448,11 @@
     enabled: true
     state: started
 
-- name: Flush handlers for this VPN instance ({{ openvpn_vpn_name }})
-  meta: flush_handlers
+- name: Flush handlers for this VPN instance
+  ansible.builtin.meta: flush_handlers
 
 # Client setup
-- name: Build client certificates ({{ openvpn_vpn_name }} - {{ ovpn_client.name }})
+- name: Build client certificates
   vars:
     ovpn_client_name: "{{ ovpn_client.name }}"
   command: ./easyrsa --batch build-client-full {{ ovpn_client_name }} nopass
@@ -463,8 +463,9 @@
   loop: "{{ openvpn_clients }}"
   loop_control:
     loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
 
-- name: Render CCD entries per client ({{ openvpn_vpn_name }} - {{ ovpn_client.name }})
+- name: Render CCD entries per client
   vars:
     ovpn_client_name: "{{ ovpn_client.name }}"
     ovpn_client_type: "{{ ovpn_client.type | default('roaming') }}"
@@ -483,6 +484,7 @@
   loop: "{{ openvpn_clients }}"
   loop_control:
     loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
   notify: Restart OpenVPN server instance
 
 - name: Ensure client export directory exists ({{ openvpn_vpn_name }})
@@ -511,11 +513,12 @@
     jump: MASQUERADE
     comment: "NAT for VPN clients"
 
-- name: Export inline client configs locally ({{ openvpn_vpn_name }} - {{ ovpn_client.name }})
+- name: Export inline client configs locally
   include_tasks: export_client.yml
   loop: "{{ openvpn_clients }}"
   loop_control:
     loop_var: ovpn_client
+    label: "{{ ovpn_client.name | default('unnamed') }}"
   vars:
     client_name: "{{ ovpn_client.name }}"
     client_type: "{{ ovpn_client.type | default('roaming') }}"
@@ -525,3 +528,13 @@
     client_local_dir: "{{ openvpn_client_local_dir }}"
     client_config_basename: "{{ openvpn_vpn_name }}_{{ client_name }}"
     client_local_config_file: "{{ client_local_dir }}/{{ client_config_basename }}.ovpn"
+
+- name: Force OpenVPN server restart after role run ({{ openvpn_vpn_name }})
+  ansible.builtin.debug:
+    msg: "Forcing OpenVPN server restart for {{ openvpn_vpn_name }}"
+  changed_when: true
+  notify: Restart OpenVPN server instance
+  when: openvpn_force_restart_after_run | bool
+
+- name: Flush handlers after client configuration
+  ansible.builtin.meta: flush_handlers

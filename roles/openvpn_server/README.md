@@ -49,6 +49,7 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_default_dns_servers` (default: `[]`): DNS servers pushed to clients when `openvpn_dns_servers` is not set.
   - `openvpn_default_dns_domain` (default: `"."`): domain-route scope pushed when DNS servers are present.
   - `openvpn_default_dual_stack` (default: `true`)
+- `openvpn_force_restart_after_run` (bool, default: `false`): force the role's OpenVPN restart handler at the end of each configured server instance even when no managed files changed. Useful for testing reconnect behavior after OpenVPN restarts.
 - `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}/openvpn-clients`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/<vpn_name>_<client>.ovpn`.
 

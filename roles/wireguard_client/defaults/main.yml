@@ -1,0 +1,25 @@
+---
+wireguard_interface: wg0
+wireguard_network_name: home
+
+# Must match the peer name used in wireguard_server.
+wireguard_client_name: "{{ inventory_hostname }}"
+
+wireguard_config_dir: /etc/wireguard
+wireguard_client_config_file: "{{ wireguard_config_dir }}/{{ wireguard_interface }}.conf"
+
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+wireguard_client_local_dir_base: "{{ artifacts_dir }}/wireguard-clients"
+wireguard_client_local_dir: >-
+  {{ wireguard_client_local_dir_base }}/{{ wireguard_network_name }}
+wireguard_client_source_config: "{{ wireguard_client_local_dir }}/{{ wireguard_client_name }}.conf"
+
+wireguard_client_manage_service: true
+
+wireguard_client_packages:
+  - wireguard
+  - wireguard-tools
+
+# If generated configs include DNS=, wg-quick needs a resolver helper on many
+# Debian/Ubuntu clients. Set to ['resolvconf'] or ['openresolv'] where needed.
+wireguard_client_dns_helper_packages: []

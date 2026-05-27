@@ -19,6 +19,8 @@ Ansible roles for home/family infrastructure (servers, laptops, workstations, et
 - [ssh_user_keys_install](roles/ssh_user_keys_install/): installs `authorized_keys` for the current SSH user from inline keys and/or controller files
 - [ssh_users](roles/ssh_users/): installs linux users, enables ssh access and hardens ssh.
 - [update_debian_ubuntu](roles/update_debian_ubuntu/): updating of the system
+- [wireguard_client](roles/wireguard_client/): installs a generated native *WireGuard* client config from controller artifacts
+- [wireguard_server](roles/wireguard_server/): installs and configures a native *WireGuard* server with preserved server and peer keys, generated client configs, and controller exports
 
 
 ## Global config
