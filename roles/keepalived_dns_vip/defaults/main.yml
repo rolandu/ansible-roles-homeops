@@ -1,0 +1,29 @@
+---
+keepalived_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
+keepalived_instance_name: VI_DNS
+keepalived_state: BACKUP
+keepalived_priority: 100
+keepalived_virtual_router_id: 53
+keepalived_vip: ""
+
+keepalived_auth_pass: ""
+
+keepalived_packages:
+  - keepalived
+  - dnsutils
+
+keepalived_config_path: /etc/keepalived/keepalived.conf
+keepalived_dns_check_script_path: /usr/local/sbin/keepalived-check-dns.sh
+keepalived_dns_check_server: 127.0.0.1
+keepalived_dns_check_port: 53
+keepalived_dns_check_name: example.com
+keepalived_dns_check_type: A
+keepalived_dns_check_timeout: 1
+keepalived_dns_check_tries: 1
+keepalived_dns_check_interval: 2
+keepalived_dns_check_fall: 2
+keepalived_dns_check_rise: 2
+
+keepalived_validate_config: true
+keepalived_run_dns_check: true
+keepalived_manage_service: true

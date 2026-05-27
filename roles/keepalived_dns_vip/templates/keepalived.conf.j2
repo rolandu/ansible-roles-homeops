@@ -1,0 +1,32 @@
+global_defs {
+    enable_script_security
+    script_user root
+}
+
+vrrp_script chk_dns {
+    script "{{ keepalived_dns_check_script_path }}"
+    interval {{ keepalived_dns_check_interval }}
+    fall {{ keepalived_dns_check_fall }}
+    rise {{ keepalived_dns_check_rise }}
+}
+
+vrrp_instance {{ keepalived_instance_name }} {
+    state {{ keepalived_state }}
+    interface {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_virtual_router_id }}
+    priority {{ keepalived_priority }}
+    advert_int 1
+
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_auth_pass }}
+    }
+
+    virtual_ipaddress {
+        {{ keepalived_vip }}
+    }
+
+    track_script {
+        chk_dns
+    }
+}

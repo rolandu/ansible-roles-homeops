@@ -1,0 +1,91 @@
+---
+- name: Validate Keepalived DNS VIP platform
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+    fail_msg: "keepalived_dns_vip currently supports Debian-family hosts."
+
+- name: Validate Keepalived DNS VIP settings
+  ansible.builtin.assert:
+    that:
+      - keepalived_interface is match('^[A-Za-z0-9_.:-]+$')
+      - keepalived_instance_name is match('^[A-Za-z0-9_]+$')
+      - keepalived_state in ['MASTER', 'BACKUP']
+      - keepalived_priority | int >= 1
+      - keepalived_priority | int <= 254
+      - keepalived_virtual_router_id | int >= 1
+      - keepalived_virtual_router_id | int <= 255
+      - keepalived_vip | string | trim | length > 0
+      - keepalived_vip is match('^[0-9A-Fa-f:.]+/[0-9]{1,3}$')
+      - keepalived_auth_pass | string | length > 0
+      - keepalived_auth_pass | string | length <= 8
+      - keepalived_auth_pass is match('^[A-Za-z0-9_.-]+$')
+      - keepalived_dns_check_server | string | trim | length > 0
+      - keepalived_dns_check_port | int >= 1
+      - keepalived_dns_check_port | int <= 65535
+      - keepalived_dns_check_name | string | trim | length > 0
+      - keepalived_dns_check_type is match('^[A-Za-z0-9]+$')
+      - keepalived_dns_check_timeout | int >= 1
+      - keepalived_dns_check_tries | int >= 1
+      - keepalived_dns_check_interval | int >= 1
+      - keepalived_dns_check_fall | int >= 1
+      - keepalived_dns_check_rise | int >= 1
+    fail_msg: >-
+      Set a valid interface, instance name, state, priority, virtual router ID,
+      CIDR VIP, short auth_pass, and DNS health-check target.
+
+- name: Install Keepalived DNS VIP packages
+  ansible.builtin.apt:
+    name: "{{ keepalived_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure DNS health check directory exists
+  ansible.builtin.file:
+    path: "{{ keepalived_dns_check_script_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install DNS health check
+  ansible.builtin.template:
+    src: keepalived-check-dns.sh.j2
+    dest: "{{ keepalived_dns_check_script_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Configure Keepalived DNS VIP
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: "{{ keepalived_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart keepalived
+  no_log: true
+
+- name: Validate Keepalived configuration
+  ansible.builtin.command:
+    cmd: "keepalived -t -f {{ keepalived_config_path }}"
+  changed_when: false
+  when:
+    - keepalived_validate_config | bool
+    - not ansible_check_mode
+  no_log: true
+
+- name: Run DNS health check
+  ansible.builtin.command:
+    cmd: "{{ keepalived_dns_check_script_path }}"
+  changed_when: false
+  when:
+    - keepalived_run_dns_check | bool
+    - not ansible_check_mode
+
+- name: Enable and start Keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    enabled: true
+    state: started
+  when: keepalived_manage_service | bool

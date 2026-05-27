@@ -139,6 +139,16 @@ If local caller playbooks or inventories exist outside this repo,
 `ansible-playbook --syntax-check` or a targeted dry run may be useful. If
 meaningful validation cannot be run, say so plainly.
 
+## Local Agent Environment
+
+- Agents may run Ansible validation and tests in this reusable role repo,
+  including `ansible-lint`, role scenario scripts, syntax checks with temporary
+  inventories, and local test playbooks when useful.
+- Prefer repo-local temp/cache paths for Ansible tooling, such as
+  `.ansible-tmp/cache` and `.ansible-tmp/local`.
+- If the command sandbox cannot create its `/tmp` mount marker, request
+  escalation and use simple non-login shell commands where possible.
+
 ## Agent Workflow
 
 When modifying this repo:
