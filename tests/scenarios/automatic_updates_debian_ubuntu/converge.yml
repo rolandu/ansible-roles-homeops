@@ -1,0 +1,8 @@
+---
+- name: Converge automatic_updates_debian_ubuntu
+  hosts: automatic_updates_debian_ubuntu_targets
+  gather_facts: false
+  become: true
+
+  roles:
+    - automatic_updates_debian_ubuntu

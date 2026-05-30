@@ -1,0 +1,2 @@
+APT::Periodic::Update-Package-Lists "{{ (automatic_updates_debian_ubuntu_enabled | bool) | ternary(automatic_updates_debian_ubuntu_update_interval_days | int, 0) }}";
+APT::Periodic::Unattended-Upgrade "{{ (automatic_updates_debian_ubuntu_enabled | bool) | ternary(automatic_updates_debian_ubuntu_upgrade_interval_days | int, 0) }}";

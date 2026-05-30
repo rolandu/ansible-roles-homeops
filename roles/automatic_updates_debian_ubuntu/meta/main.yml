@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: rolandu
+  description: Configure automatic security updates on Debian and Ubuntu.
+  license: MIT
+  min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []
