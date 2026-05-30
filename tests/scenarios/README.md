@@ -58,6 +58,17 @@ creates a managed user, appends supplementary groups, writes authorized keys,
 leaves unrelated groups alone, removes explicitly absent groups, and remains
 idempotent.
 
+Run the automatic security updates scenario:
+
+```bash
+tests/scenarios/automatic_updates_debian_ubuntu/run.sh
+```
+
+This verifies that `automatic_updates_debian_ubuntu` installs the native update
+packages, writes security-only unattended-upgrades origins, configures reboot
+and service restart behavior, logs apt-listchanges output, and remains
+idempotent.
+
 ## Requirements
 
 The current user must be able to access Docker. If Docker was just installed or

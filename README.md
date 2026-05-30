@@ -9,6 +9,7 @@ Ansible roles for home/family infrastructure (servers, laptops, workstations, et
 
 ## What is in it?
 
+- [automatic_updates_debian_ubuntu](roles/automatic_updates_debian_ubuntu/): enables conservative automatic security updates on Debian/Ubuntu with unattended-upgrades.
 - [certbot_hetzner](roles/certbot_hetzner/): uses Hetzner's DNS system and certbot to generate *Let's encrypt* certificates
 - [certificates_replicate](roles/certificates_replicate/): pulls certificate directories from another host over SSH/rsync and optionally reloads nginx when files change.
 - [certificates_replicate_dsm](roles/certificates_replicate_dsm/): downloads a DSM certificate update script, wraps it with inventory configuration, and prints the Synology Task Scheduler command.
@@ -86,8 +87,10 @@ SSH.
 Current scenarios:
 
 ```bash
+tests/scenarios/automatic_updates_debian_ubuntu/run.sh
 tests/scenarios/ssh_user_keys_generate/run.sh
 tests/scenarios/ssh_user_keys_install/run.sh
+tests/scenarios/ssh_users/run.sh
 ```
 
 The scenarios build a shared Ubuntu SSH target image from
