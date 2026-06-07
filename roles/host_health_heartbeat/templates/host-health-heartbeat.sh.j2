@@ -199,6 +199,10 @@ check_diskspace_path() {
     fi
 
     inode_use_pct="$(awk 'NR == 2 { gsub("%", "", $5); print $5 }' <<<"$inode_output")"
+    if [[ -z "$inode_use_pct" || "$inode_use_pct" == "-" ]]; then
+      return
+    fi
+
     if [[ ! "$inode_use_pct" =~ ^[0-9]+$ ]]; then
       add_error "Could not parse inode usage for ${path}"
       return

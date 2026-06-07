@@ -79,7 +79,9 @@ Check variables:
 - `host_health_heartbeat_diskspace_min_free_pct` (int, default `10`): minimum
   free disk percentage.
 - `host_health_heartbeat_diskspace_min_free_inodes_pct` (int, default `5`):
-  minimum free inode percentage. Set to `-1` to skip inode checks.
+  minimum free inode percentage. Set to `-1` to skip inode checks. Filesystems
+  where `df -Pi` reports inode usage as unavailable, such as FAT EFI
+  partitions, are skipped for this threshold.
 - `host_health_heartbeat_systemd_failed_units` (bool, default `true`): fail
   when `systemctl --failed` reports units.
 - `host_health_heartbeat_load_check` (bool, default `true`): check 1-minute
