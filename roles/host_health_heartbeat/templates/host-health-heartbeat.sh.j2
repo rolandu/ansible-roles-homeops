@@ -131,7 +131,15 @@ notify_http() {
   fi
 
   curl_args=(--fail --silent --show-error --request "$NOTIFY_METHOD")
-{% for header in host_health_heartbeat_notify_headers %}
+{% set heartbeat_notify_headers = (
+  host_health_heartbeat_effective_notify_headers
+  | default(
+    [host_health_heartbeat_notify_headers]
+    if (host_health_heartbeat_notify_headers is string)
+    else host_health_heartbeat_notify_headers
+  )
+) %}
+{% for header in heartbeat_notify_headers %}
   curl_args+=(--header {{ header | quote }})
 {% endfor %}
   curl_args+=("$url")

@@ -13,12 +13,9 @@
       - host_health_heartbeat_install_cron | type_debug == "bool"
       - host_health_heartbeat_cron_schedule | length > 0
       - host_health_heartbeat_validate_run | type_debug == "bool"
-      - host_health_heartbeat_notify_method is match('^[A-Z]+$')
-      - host_health_heartbeat_notify_success_url | length > 0
-      - host_health_heartbeat_notify_success_url is match('^https?://')
-      - host_health_heartbeat_notify_failure_url | length > 0
-      - host_health_heartbeat_notify_failure_url is match('^https?://')
-      - host_health_heartbeat_notify_headers | type_debug == "list"
+      - >-
+        host_health_heartbeat_notify_headers is string
+        or host_health_heartbeat_notify_headers | type_debug == "list"
       - host_health_heartbeat_error_max_chars | int > 0
       - host_health_heartbeat_check_diskspace | type_debug == "bool"
       - host_health_heartbeat_diskspace_check_all | type_debug == "bool"
@@ -42,6 +39,27 @@
     fail_msg: >-
       host_health_heartbeat needs valid absolute script/log paths, booleans,
       notification settings, check lists, and thresholds.
+
+- name: Validate host health heartbeat notification URL settings
+  ansible.builtin.assert:
+    that:
+      - host_health_heartbeat_notify_method is match('^[A-Z]+$')
+      - host_health_heartbeat_notify_success_url | length > 0
+      - host_health_heartbeat_notify_success_url is match('^https?://')
+      - host_health_heartbeat_notify_failure_url | length > 0
+      - host_health_heartbeat_notify_failure_url is match('^https?://')
+    fail_msg: >-
+      host_health_heartbeat needs an uppercase HTTP method and absolute
+      http(s) success/failure notification URL templates.
+
+- name: Build effective host health heartbeat notification headers
+  ansible.builtin.set_fact:
+    host_health_heartbeat_effective_notify_headers: >-
+      {{
+        [host_health_heartbeat_notify_headers]
+        if (host_health_heartbeat_notify_headers is string)
+        else host_health_heartbeat_notify_headers
+      }}
   no_log: true
 
 - name: Validate default Gatus notification settings
@@ -70,7 +88,7 @@
     fail_msg: >-
       Each host_health_heartbeat_notify_headers item must be a single non-empty
       HTTP header.
-  loop: "{{ host_health_heartbeat_notify_headers }}"
+  loop: "{{ host_health_heartbeat_effective_notify_headers }}"
   no_log: true
 
 - name: Validate host health heartbeat diskspace filesystems
