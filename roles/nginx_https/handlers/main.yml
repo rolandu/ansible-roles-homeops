@@ -1,20 +1,22 @@
 ---
 - name: Reload nginx
-  ansible.builtin.command: nginx -t
-  changed_when: false
-  notify: Reload nginx service
+  block:
+    - name: Validate nginx configuration before reload
+      ansible.builtin.command: nginx -t
+      changed_when: false
 
-- name: Reload nginx service
-  ansible.builtin.systemd:
-    name: nginx
-    state: reloaded
+    - name: Reload nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
 
 - name: Restart nginx
-  ansible.builtin.command: nginx -t
-  changed_when: false
-  notify: Restart nginx service
+  block:
+    - name: Validate nginx configuration before restart
+      ansible.builtin.command: nginx -t
+      changed_when: false
 
-- name: Restart nginx service
-  ansible.builtin.systemd:
-    name: nginx
-    state: restarted
+    - name: Restart nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted

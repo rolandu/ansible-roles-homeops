@@ -7,7 +7,7 @@ authors:
   - rolandu
 description: >-
   Ansible roles for home/family infrastructure (VPN, SSH users, certificates,
-  Certbot/Hetzner DNS, nginx, and automatic updates).
+  Certbot/Hetzner DNS, nginx, monitoring, and automatic updates).
 license:
   - MIT
 tags:
@@ -19,6 +19,7 @@ tags:
   - certificates
   - hetzner
   - nginx
+  - monitoring
   - updates
   - security
 dependencies: {}

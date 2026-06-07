@@ -1,0 +1,71 @@
+---
+app_root_dir: "/opt"
+
+host_health_heartbeat_script_dir: "{{ app_root_dir }}/host-health-heartbeat"
+host_health_heartbeat_script_path: >-
+  {{ host_health_heartbeat_script_dir }}/host-health-heartbeat.sh
+host_health_heartbeat_log_file: /var/log/host-health-heartbeat.log
+host_health_heartbeat_log_mode: '0640'
+
+host_health_heartbeat_install_dependencies: true
+
+host_health_heartbeat_install_cron: true
+host_health_heartbeat_cron_schedule: "*/10 * * * *"
+host_health_heartbeat_validate_run: false
+
+# Gatus-compatible default notification settings. Override the generic
+# notify_* variables below to use another HTTP receiver.
+host_health_heartbeat_gatus_url: ""
+host_health_heartbeat_gatus_endpoint_key: ""
+host_health_heartbeat_gatus_token: ""
+host_health_heartbeat_gatus_notify_success_url: >-
+  {{
+    (host_health_heartbeat_gatus_url | regex_replace('/+$', ''))
+    ~ '/api/v1/endpoints/'
+    ~ host_health_heartbeat_gatus_endpoint_key
+    ~ '/external?success={success}&duration={duration}'
+  }}
+host_health_heartbeat_gatus_notify_failure_url: >-
+  {{
+    (host_health_heartbeat_gatus_url | regex_replace('/+$', ''))
+    ~ '/api/v1/endpoints/'
+    ~ host_health_heartbeat_gatus_endpoint_key
+    ~ '/external?success={success}&duration={duration}&error={error}'
+  }}
+host_health_heartbeat_gatus_notify_headers:
+  - "Authorization: Bearer {{ host_health_heartbeat_gatus_token }}"
+
+host_health_heartbeat_notify_method: POST
+host_health_heartbeat_notify_success_url: >-
+  {{ host_health_heartbeat_gatus_notify_success_url }}
+host_health_heartbeat_notify_failure_url: >-
+  {{ host_health_heartbeat_gatus_notify_failure_url }}
+host_health_heartbeat_notify_headers:
+  - "Authorization: Bearer {{ host_health_heartbeat_gatus_token }}"
+host_health_heartbeat_error_max_chars: 1200
+
+host_health_heartbeat_check_diskspace: true
+host_health_heartbeat_diskspace_check_all: true
+host_health_heartbeat_diskspace_filesystems: []
+host_health_heartbeat_diskspace_min_free_pct: 10
+host_health_heartbeat_diskspace_min_free_inodes_pct: 5
+
+host_health_heartbeat_systemd_failed_units: true
+
+host_health_heartbeat_load_check: true
+host_health_heartbeat_load_1m_max_per_cpu: 8.0
+
+host_health_heartbeat_memory_check: false
+host_health_heartbeat_memory_min_available_pct: 5
+
+# Optional hardware/filesystem checks. They fail if enabled/configured and the
+# corresponding command is missing on the host.
+host_health_heartbeat_smart_devices: []
+host_health_heartbeat_zfs_check: false
+host_health_heartbeat_zfs_pools: []
+host_health_heartbeat_btrfs_paths: []
+host_health_heartbeat_docker_containers: []
+
+# Custom root-run shell checks. A nonzero exit status marks the heartbeat as
+# failed and includes the command output summary in the notification message.
+host_health_heartbeat_custom_commands: []
