@@ -1,0 +1,8 @@
+---
+hosts_file_rewrites: "{{ adguard_rewrites | default([]) }}"
+
+hosts_file_manage_cloud_init: true
+hosts_file_cloud_init_mode: localhost
+hosts_file_cloud_init_config_path: /etc/cloud/cloud.cfg.d/99-homeops-hosts-file.cfg
+
+hosts_file_validate: true
