@@ -13,6 +13,7 @@ so the same rewrite data can be reused for local hosts-file entries.
 
 - `hosts_file_rewrites` (list, default: `{{ adguard_rewrites | default([]) }}`):
   hosts entries to manage. Each entry must have `domain` and `answer`.
+  (This is the same format that the adguardhome_docker role uses.)
 - `hosts_file_manage_cloud_init` (bool, default: `true`): when `/etc/cloud`
   exists, write a cloud-init drop-in so cloud-init only manages the local
   hostname entry.
