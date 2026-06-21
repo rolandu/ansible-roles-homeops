@@ -103,3 +103,16 @@ converge, and run a verification playbook.
 The current user must be able to access Docker. After installing Docker or
 adding your user to the `docker` group, log out and back in before running the
 scenarios.
+
+## Repository index
+
+`repo-index.txt` lists the repository files that are visible to Git after
+`.gitignore` handling, with a short description for each path. Refresh it after
+adding files:
+
+```bash
+scripts/index-repo.sh
+```
+
+Existing text after `: ` is preserved, so descriptions can be edited by hand and
+the script will only add, remove, and sort paths.

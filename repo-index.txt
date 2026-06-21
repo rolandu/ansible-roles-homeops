@@ -1,0 +1,142 @@
+.gitignore: Git ignore rules for editor cruft, Ansible temp files, retry files, and local artifact exports.
+AGENTS.md: Repository-specific instructions for agents, including role conventions and repository index maintenance workflow.
+LICENSE: Project license text.
+README.md: Collection overview, role list, shared path conventions, linting, scenario tests, and repository index usage.
+galaxy.yml: Ansible Galaxy collection metadata, namespace, version, authorship, tags, and repository links.
+repo-index.txt: Generated path index with short descriptions for Git-visible repository files.
+roles/adguardhome_docker/README.md: Role documentation for running AdGuard Home with Docker Compose and persistent app/data paths.
+roles/adguardhome_docker/defaults/main.yml: Default variables for AdGuard Home Docker install paths, DNS settings, rewrites, Compose, and teardown behavior.
+roles/adguardhome_docker/handlers/main.yml: Handlers for restarting the AdGuard Home Docker Compose service when managed files change.
+roles/adguardhome_docker/tasks/main.yml: Main AdGuard Home Docker tasks for validation, directories, config, Compose deployment, and optional teardown.
+roles/adguardhome_docker/templates/AdGuardHome.yaml.j2: Jinja2 template for the AdGuard Home application configuration.
+roles/adguardhome_docker/templates/compose.yml.j2: Docker Compose template for the AdGuard Home container service.
+roles/automatic_updates_debian_ubuntu/README.md: Role documentation for conservative automatic security updates on Debian and Ubuntu.
+roles/automatic_updates_debian_ubuntu/defaults/main.yml: Default unattended-upgrades, apt-listchanges, needrestart, cleanup, and reboot behavior settings.
+roles/automatic_updates_debian_ubuntu/meta/main.yml: Role metadata for automatic update management, including the Ansible version baseline.
+roles/automatic_updates_debian_ubuntu/tasks/main.yml: Installs and configures unattended-upgrades, apt-listchanges, needrestart, and related APT automation.
+roles/automatic_updates_debian_ubuntu/templates/20auto-upgrades.j2: APT periodic configuration template for automated update, upgrade, and cleanup intervals.
+roles/automatic_updates_debian_ubuntu/templates/50unattended-upgrades.j2: unattended-upgrades policy template for origins, package filters, notifications, and reboot behavior.
+roles/automatic_updates_debian_ubuntu/templates/apt-listchanges-logrotate.j2: Logrotate template for apt-listchanges history output.
+roles/automatic_updates_debian_ubuntu/templates/apt-listchanges.conf.j2: apt-listchanges configuration template for unattended update notifications.
+roles/automatic_updates_debian_ubuntu/templates/needrestart-auto.conf.j2: needrestart template for automatic restart decisions after package updates.
+roles/certbot_hetzner/README.md: Role documentation for issuing Let's Encrypt certificates with certbot and Hetzner DNS-01 hooks.
+roles/certbot_hetzner/defaults/main.yml: Default certbot, Hetzner token, certificate domain, renewal, and hook settings.
+roles/certbot_hetzner/meta/main.yml: Role metadata for Hetzner-backed certbot certificate management.
+roles/certbot_hetzner/tasks/main.yml: Installs certbot tooling, validates certificate inputs, writes hooks, and manages certificate issuance or renewal.
+roles/certbot_hetzner/templates/certbot-dns-hook-hetzner.sh.j2: Certbot DNS hook script template that manages Hetzner TXT records for DNS-01 validation.
+roles/certbot_hetzner/templates/certbot-hetzner-run.sh.j2: Role-managed certbot wrapper script template for requesting or renewing Hetzner DNS certificates.
+roles/certificates_replicate/README.md: Role documentation for pulling certificate directories from another host and optionally reloading nginx.
+roles/certificates_replicate/defaults/main.yml: Default rsync, SSH, source, destination, schedule, dry-run, and reload settings for certificate replication.
+roles/certificates_replicate/meta/main.yml: Role metadata for generic certificate replication.
+roles/certificates_replicate/tasks/main.yml: Configures certificate replication prerequisites, managed script, cron schedule, permissions, and optional reload behavior.
+roles/certificates_replicate/templates/replicate-certificates.sh.j2: Shell script template that rsyncs certificate files from a source host into a managed destination.
+roles/certificates_replicate_dsm/README.md: Role documentation for preparing DSM certificate replication through Synology Task Scheduler.
+roles/certificates_replicate_dsm/defaults/main.yml: Default DSM certificate replication URLs, local paths, identity, schedule notes, and script settings.
+roles/certificates_replicate_dsm/meta/main.yml: Role metadata for DSM certificate replication support.
+roles/certificates_replicate_dsm/tasks/main.yml: Downloads DSM helper tooling, writes inventory-specific wrapper scripts, and prints the scheduler command.
+roles/certificates_replicate_dsm/templates/dsm-task-replicate-certificates.sh.j2: Synology Task Scheduler wrapper template for running DSM certificate replication.
+roles/certificates_replicate_dsm/templates/replicate-certificates.sh.j2: DSM certificate replication script template used by the scheduled wrapper.
+roles/host_health_heartbeat/README.md: Role documentation for reporting host health to an HTTP monitoring endpoint.
+roles/host_health_heartbeat/defaults/main.yml: Default heartbeat endpoint, checks, timing, script, log, and cron configuration.
+roles/host_health_heartbeat/meta/main.yml: Role metadata for host health heartbeat reporting.
+roles/host_health_heartbeat/tasks/main.yml: Validates heartbeat settings, installs the reporting script, manages log permissions, and configures cron.
+roles/host_health_heartbeat/templates/host-health-heartbeat.sh.j2: Shell script template that performs host health checks and reports status to an HTTP endpoint.
+roles/hosts_file/README.md: Role documentation for managing persistent /etc/hosts entries from domain and answer mappings.
+roles/hosts_file/defaults/main.yml: Default variables for managed hosts file entries and marker configuration.
+roles/hosts_file/meta/main.yml: Role metadata for hosts file management.
+roles/hosts_file/tasks/main.yml: Validates and writes managed host mappings into /etc/hosts.
+roles/keepalived_dns_vip/README.md: Role documentation for managing a Keepalived VRRP floating IP backed by DNS health checks.
+roles/keepalived_dns_vip/defaults/main.yml: Default Keepalived interface, VIP, VRRP, DNS check, script, and service settings.
+roles/keepalived_dns_vip/handlers/main.yml: Handlers for restarting Keepalived after managed configuration changes.
+roles/keepalived_dns_vip/meta/main.yml: Role metadata for Keepalived DNS VIP management.
+roles/keepalived_dns_vip/tasks/main.yml: Installs Keepalived, validates VIP inputs, deploys health checks, writes config, and manages the service.
+roles/keepalived_dns_vip/templates/keepalived-check-dns.sh.j2: Health check script template that verifies DNS answers before VRRP promotion.
+roles/keepalived_dns_vip/templates/keepalived.conf.j2: Keepalived configuration template for VRRP instance, VIP, authentication, and tracking script.
+roles/nginx_https/README.md: Role documentation for nginx HTTPS reverse proxy and static site vhost management.
+roles/nginx_https/defaults/main.yml: Default nginx package, service, TLS, proxy, static site, and vhost configuration settings.
+roles/nginx_https/handlers/main.yml: Handlers for reloading or restarting nginx after configuration changes.
+roles/nginx_https/meta/main.yml: Role metadata for nginx HTTPS management.
+roles/nginx_https/tasks/main.yml: Installs nginx, validates vhosts, writes HTTPS snippets and site configs, enables sites, and checks service state.
+roles/nginx_https/templates/00-http-redirect.conf.j2: Nginx template for redirecting HTTP traffic to HTTPS.
+roles/nginx_https/templates/proxy-common.conf.j2: Shared nginx proxy settings template for forwarded headers and upstream behavior.
+roles/nginx_https/templates/reverse-proxy.conf.j2: Nginx vhost template for HTTPS reverse proxy sites.
+roles/nginx_https/templates/security-headers.conf.j2: Shared nginx security header snippet template.
+roles/nginx_https/templates/ssl-common.conf.j2: Shared nginx TLS settings template for certificate paths and SSL options.
+roles/nginx_https/templates/static-site.conf.j2: Nginx vhost template for serving static HTTPS sites.
+roles/openvpn_client/README.md: Role documentation for installing OpenVPN clients from server-exported bundles.
+roles/openvpn_client/defaults/main.yml: Default OpenVPN client bundle paths, network mode, gateway, DNS, and NetworkManager settings.
+roles/openvpn_client/handlers/main.yml: Handlers for restarting OpenVPN or NetworkManager client services after configuration changes.
+roles/openvpn_client/meta/main.yml: Role metadata for OpenVPN client management.
+roles/openvpn_client/tasks/configure_for_every_network.yml: Optional tasks that configure the client to work across network changes.
+roles/openvpn_client/tasks/main.yml: Entry point for validating OpenVPN client config and including per-client management tasks.
+roles/openvpn_client/tasks/manage_client.yml: Shared per-client orchestration tasks for choosing NetworkManager, OpenVPN service, or gateway setup.
+roles/openvpn_client/tasks/manage_client_gateway.yml: Tasks for configuring an OpenVPN client host as a gateway.
+roles/openvpn_client/tasks/manage_client_networkmanager.yml: Tasks for importing and managing OpenVPN client profiles in NetworkManager.
+roles/openvpn_client/tasks/manage_client_openvpn.yml: Tasks for installing and managing OpenVPN client service configuration files.
+roles/openvpn_client/templates/nm-openvpn-autoconnect.sh.j2: Script template that helps NetworkManager OpenVPN profiles reconnect automatically.
+roles/openvpn_client/templates/openvpn-client-override.conf.j2: systemd override template for OpenVPN client service behavior.
+roles/openvpn_server/README.md: Role documentation for installing OpenVPN servers and exporting generated client bundles.
+roles/openvpn_server/defaults/main.yml: Default OpenVPN server instances, client definitions, addressing, DNS, certificate, and export settings.
+roles/openvpn_server/handlers/main.yml: Handlers for restarting OpenVPN server services after managed configuration changes.
+roles/openvpn_server/meta/main.yml: Role metadata for OpenVPN server management.
+roles/openvpn_server/tasks/export_client.yml: Per-client export tasks that render client configs and copy bundles to controller artifacts.
+roles/openvpn_server/tasks/main.yml: Entry point for validating OpenVPN server config and including server instance tasks.
+roles/openvpn_server/tasks/server_instance.yml: Per-server tasks for packages, PKI, server config, client directories, sysctl, firewall, and service setup.
+roles/openvpn_server/templates/ccd-client.j2: OpenVPN client-specific configuration template for routed client networks.
+roles/openvpn_server/templates/client.ovpn.j2: OpenVPN client profile template exported for client hosts or users.
+roles/openvpn_server/templates/server.conf.j2: OpenVPN server configuration template for listener, network, routes, DNS, and crypto settings.
+roles/ssh_user_keys_generate/README.md: Role documentation for generating an SSH key for the current SSH user and exporting its public key.
+roles/ssh_user_keys_generate/defaults/main.yml: Default SSH key type, path, permissions, comment, force behavior, and controller export location.
+roles/ssh_user_keys_generate/meta/main.yml: Role metadata for SSH user key generation.
+roles/ssh_user_keys_generate/tasks/main.yml: Generates an SSH keypair for the current SSH user and exports the public key to controller artifacts.
+roles/ssh_user_keys_install/README.md: Role documentation for installing authorized_keys from inline keys and controller-side public key files.
+roles/ssh_user_keys_install/defaults/main.yml: Default authorized_keys inputs, exclusive mode, permissions, and controller key lookup settings.
+roles/ssh_user_keys_install/meta/main.yml: Role metadata for SSH authorized key installation.
+roles/ssh_user_keys_install/tasks/main.yml: Validates and installs authorized_keys entries for the current SSH user.
+roles/ssh_users/README.md: Role documentation for Linux user management, SSH access, ops user setup, and SSH hardening.
+roles/ssh_users/defaults/main.yml: Default user, group, SSH key, sudo, shell, hardening, and ops user settings.
+roles/ssh_users/handlers/main.yml: Handlers for reloading or restarting SSH services after hardening changes.
+roles/ssh_users/meta/main.yml: Role metadata for SSH user management.
+roles/ssh_users/tasks/hardening.yml: SSH daemon hardening tasks for auth options, service detection, handler flushing, and connectivity checks.
+roles/ssh_users/tasks/main.yml: Entry point for validating SSH user inputs and including group, user, key, ops, and hardening tasks.
+roles/ssh_users/tasks/manage_groups.yml: Tasks for creating and managing supplementary Linux groups.
+roles/ssh_users/tasks/manage_user.yml: Per-user tasks for accounts, groups, shell, sudo, password hashes, and home directory handling.
+roles/ssh_users/tasks/ops_user_setup.yml: Tasks for setting up the current SSH user as an ops account with sudo and SSH access.
+roles/ssh_users/tasks/user_keys_generate.yml: Tasks for generating per-user SSH keys and exporting public keys to controller artifacts.
+roles/ssh_users/tasks/user_keys_install.yml: Tasks for installing per-user authorized_keys from inline keys or exported controller files.
+roles/update_debian_ubuntu/README.md: Role documentation for updating Debian and Ubuntu hosts.
+roles/update_debian_ubuntu/defaults/main.yml: Default apt update, upgrade, autoremove, autoclean, reboot, and cache behavior settings.
+roles/update_debian_ubuntu/meta/main.yml: Role metadata for Debian and Ubuntu update management.
+roles/update_debian_ubuntu/tasks/main.yml: Performs apt cache updates, package upgrades, cleanup, reboot checks, and optional reboot handling.
+roles/wireguard_client/README.md: Role documentation for installing native WireGuard client configs from exported artifacts.
+roles/wireguard_client/defaults/main.yml: Default WireGuard client config source, interface, service, and network settings.
+roles/wireguard_client/handlers/main.yml: Handlers for restarting WireGuard client interfaces after configuration changes.
+roles/wireguard_client/meta/main.yml: Role metadata for WireGuard client management.
+roles/wireguard_client/tasks/main.yml: Installs WireGuard, deploys a client config from controller artifacts, and manages the interface service.
+roles/wireguard_server/README.md: Role documentation for configuring native WireGuard servers and exporting generated client configs.
+roles/wireguard_server/defaults/main.yml: Default WireGuard server interface, addresses, peers, key paths, DNS, firewall, and export settings.
+roles/wireguard_server/handlers/main.yml: Handlers for restarting WireGuard server interfaces after configuration changes.
+roles/wireguard_server/meta/main.yml: Role metadata for WireGuard server management.
+roles/wireguard_server/tasks/client_configs.yml: Tasks for rendering and exporting WireGuard client configuration files to controller artifacts.
+roles/wireguard_server/tasks/main.yml: Installs WireGuard, manages server keys, writes interface config, configures peers, and controls the service.
+roles/wireguard_server/tasks/peer_keys.yml: Tasks for preserving or generating WireGuard peer private and public keys.
+roles/wireguard_server/templates/client.conf.j2: WireGuard client configuration template with peer keys, endpoint, DNS, and allowed IPs.
+roles/wireguard_server/templates/wg0.conf.j2: WireGuard server interface template with listener, keys, peers, and routing hooks.
+scripts/index-repo.sh: Bash indexer that lists Git-visible repo files and preserves descriptions after the path delimiter.
+tests/docker-installer.sh: Helper script for installing or preparing Docker support for local scenario tests.
+tests/lint-report.txt: Generated ansible-lint backlog report for the current role lint state.
+tests/lint-roles.sh: Helper script that runs ansible-lint role by role and can refresh a repo-local lint report.
+tests/scenarios/README.md: Documentation for Docker-backed role scenario tests and their shared conventions.
+tests/scenarios/_common/ubuntu-ssh-target/Dockerfile: Shared Ubuntu SSH target image used by Docker-backed scenario tests.
+tests/scenarios/automatic_updates_debian_ubuntu/converge.yml: Scenario converge playbook for the automatic updates role.
+tests/scenarios/automatic_updates_debian_ubuntu/run.sh: Docker-backed scenario runner for the automatic updates role.
+tests/scenarios/automatic_updates_debian_ubuntu/verify.yml: Scenario verification playbook for automatic updates configuration.
+tests/scenarios/ssh_user_keys_generate/converge.yml: Scenario converge playbook for SSH key generation.
+tests/scenarios/ssh_user_keys_generate/run.sh: Docker-backed scenario runner for SSH user key generation.
+tests/scenarios/ssh_user_keys_generate/verify.yml: Scenario verification playbook for generated SSH keys and exported public keys.
+tests/scenarios/ssh_user_keys_install/converge.yml: Scenario converge playbook for SSH authorized key installation.
+tests/scenarios/ssh_user_keys_install/run.sh: Docker-backed scenario runner for SSH authorized key installation.
+tests/scenarios/ssh_user_keys_install/verify.yml: Scenario verification playbook for installed authorized_keys content and permissions.
+tests/scenarios/ssh_users/converge.yml: Scenario converge playbook for SSH users, groups, keys, sudo, and hardening behavior.
+tests/scenarios/ssh_users/run.sh: Docker-backed scenario runner for the SSH users role.
+tests/scenarios/ssh_users/verify.yml: Scenario verification playbook for SSH user accounts, key state, and hardening results.

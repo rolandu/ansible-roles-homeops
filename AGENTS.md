@@ -10,6 +10,7 @@ CI jobs in this repo.
 - Collection metadata and shared docs live at the repo root:
   - `README.md`
   - `galaxy.yml`
+  - `repo-index.txt`
 - Roles live under `roles/<role_name>/` and generally contain:
   - `defaults/main.yml`
   - `tasks/main.yml` plus small included task files
@@ -17,7 +18,17 @@ CI jobs in this repo.
   - `templates/*.j2` when needed
   - `meta/main.yml`
   - `README.md`
-- Tests and helper scripts live under `tests/`.
+- Helper scripts live under `scripts/`; tests and scenario fixtures live under
+  `tests/`.
+
+## Repository Index
+
+- Use `repo-index.txt` as a quick file lookup aid before broader filesystem
+  searches when locating existing code, docs, templates, or tests.
+- Refresh the index with `scripts/index-repo.sh` after creating, removing, or
+  renaming repository files. The script respects `.gitignore` through Git's
+  exclude handling and preserves existing descriptions after `: `.
+- Keep index descriptions short, single-line, and under 200 characters.
 
 Current roles: `adguardhome_docker`, `certbot_hetzner`, `openvpn_client`,
 `openvpn_server`, `ssh_user_keys_generate`, `ssh_user_keys_install`,
@@ -153,12 +164,15 @@ meaningful validation cannot be run, say so plainly.
 
 When modifying this repo:
 
-1. Read the target role `README.md`, `defaults/main.yml`, and `tasks/main.yml`.
-2. Search for changed variable names, paths, and schemas across other roles.
-3. Make the smallest change that preserves existing conventions.
-4. Update docs in the same patch.
-5. Run relevant validation:
+1. Check `repo-index.txt` for existing files related to the task.
+2. Read the target role `README.md`, `defaults/main.yml`, and `tasks/main.yml`.
+3. Search for changed variable names, paths, and schemas across other roles.
+4. Make the smallest change that preserves existing conventions.
+5. Update docs in the same patch.
+6. If files were created, removed, or renamed, run `scripts/index-repo.sh` and
+   keep `repo-index.txt` in the same patch.
+7. Run relevant validation:
    - role lint via `tests/lint-roles.sh` when available
    - scenario tests for roles with `tests/scenarios/<role>/run.sh`
    - syntax checks if a usable caller playbook/inventory exists
-6. Summarize what changed and any validation that could not be run.
+8. Summarize what changed and any validation that could not be run.
