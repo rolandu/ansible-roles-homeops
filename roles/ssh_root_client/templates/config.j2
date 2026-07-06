@@ -1,0 +1,17 @@
+# Managed by Ansible. Local changes will be overwritten.
+{% for server in ssh_root_client_hosts %}
+Host {{ server.name }}
+  HostName {{ server.hostname }}
+  User {{ server.user }}
+  Port {{ server.port | default(22) }}
+  IdentityFile {{ _ssh_root_client_private_key_path }}
+  IdentitiesOnly yes
+  BatchMode yes
+  StrictHostKeyChecking yes
+  UserKnownHostsFile {{ ssh_root_client_known_hosts_path }}
+  ServerAliveInterval {{ ssh_root_client_server_alive_interval }}
+  ServerAliveCountMax {{ ssh_root_client_server_alive_count_max }}
+  ForwardAgent no
+  ForwardX11 no
+
+{% endfor %}

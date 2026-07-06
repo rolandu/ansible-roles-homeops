@@ -1,0 +1,24 @@
+---
+artifacts_dir: "{{ inventory_dir }}/artifacts"
+
+ssh_root_client_key_type: ed25519
+ssh_root_client_key_filename: id_ed25519_root_client
+ssh_root_client_key_comment: "root@{{ inventory_hostname }}"
+ssh_root_client_ssh_dir: /root/.ssh
+ssh_root_client_config_path: "{{ ssh_root_client_ssh_dir }}/config"
+ssh_root_client_known_hosts_path: "{{ ssh_root_client_ssh_dir }}/known_hosts"
+ssh_root_client_artifact_dir: "{{ artifacts_dir }}/ssh_keys"
+ssh_root_client_artifact_filename: "root@{{ inventory_hostname }}.pub"
+
+# Each item requires:
+# - name: SSH Host alias used by callers
+# - hostname: real server hostname or address
+# - user: remote SSH user
+# - port: optional, defaults to 22
+# - host_keys: one or more "<algorithm> <base64-key>" strings
+ssh_root_client_hosts: []
+
+# Borg's documented keepalive example: detect an unresponsive SSH connection
+# after approximately five minutes without limiting the total session length.
+ssh_root_client_server_alive_interval: 10
+ssh_root_client_server_alive_count_max: 30

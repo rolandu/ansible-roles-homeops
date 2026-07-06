@@ -1,0 +1,184 @@
+---
+- name: Validate root SSH client settings
+  ansible.builtin.assert:
+    that:
+      - ssh_root_client_key_type is match('^[A-Za-z0-9_-]+$')
+      - ssh_root_client_key_filename is match('^[A-Za-z0-9_.-]+$')
+      - ssh_root_client_key_comment | string | length > 0
+      - ssh_root_client_key_comment is not search('[\r\n]')
+      - ssh_root_client_ssh_dir is match('^/')
+      - ssh_root_client_config_path is match('^/')
+      - ssh_root_client_known_hosts_path is match('^/')
+      - ssh_root_client_artifact_dir | string | length > 0
+      - ssh_root_client_artifact_filename is match('^[A-Za-z0-9@_.-]+$')
+      - ssh_root_client_hosts | type_debug == 'list'
+      - ssh_root_client_server_alive_interval | int > 0
+      - ssh_root_client_server_alive_count_max | int > 0
+    fail_msg: >-
+      ssh_root_client requires safe key names, absolute root SSH paths, a list
+      of hosts, positive keepalive values, and a valid artifact filename.
+
+- name: Validate root SSH client host definitions
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default('') is match('^[A-Za-z0-9_.-]+$')
+      - item.hostname | default('') is match('^[A-Za-z0-9_.:-]+$')
+      - item.user | default('') is match('^[A-Za-z0-9_.-]+$')
+      - item.port | default(22) | int >= 1
+      - item.port | default(22) | int <= 65535
+      - item.host_keys | default([]) | type_debug == 'list'
+      - item.host_keys | default([]) | length > 0
+    fail_msg: >-
+      Each ssh_root_client_hosts item requires a safe unique name, hostname,
+      remote user, valid optional port, and at least one verified host key.
+  loop: "{{ ssh_root_client_hosts }}"
+  loop_control:
+    label: "{{ item.name | default('invalid host') }}"
+
+- name: Validate root SSH client host aliases are unique
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ssh_root_client_hosts | map(attribute='name') | unique | length)
+        == (ssh_root_client_hosts | length)
+    fail_msg: ssh_root_client_hosts names must be unique.
+
+- name: Initialize root SSH client host-key validation data
+  ansible.builtin.set_fact:
+    _ssh_root_client_host_key_data: []
+
+- name: Build root SSH client host-key validation data
+  ansible.builtin.set_fact:
+    _ssh_root_client_host_key_data: >-
+      {{
+        (_ssh_root_client_host_key_data | default([]))
+        + [{'name': item.name, 'host_keys': item.host_keys}]
+      }}
+  loop: "{{ ssh_root_client_hosts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Validate root SSH client host keys
+  ansible.builtin.assert:
+    that:
+      - item.1 is match('^[A-Za-z0-9@._+-]+ [A-Za-z0-9+/=]+( [^\r\n]*)?$')
+    fail_msg: >-
+      Host keys must contain OpenSSH public key material as
+      "<algorithm> <base64-key>", optionally followed by a comment.
+  loop: "{{ query('subelements', _ssh_root_client_host_key_data | default([]), 'host_keys') }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Ensure root SSH directory exists
+  ansible.builtin.file:
+    path: "{{ ssh_root_client_ssh_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Set root SSH key path
+  ansible.builtin.set_fact:
+    _ssh_root_client_private_key_path: >-
+      {{ ssh_root_client_ssh_dir }}/{{ ssh_root_client_key_filename }}
+
+- name: Generate root SSH key when absent
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -t
+      - "{{ ssh_root_client_key_type }}"
+      - -f
+      - "{{ _ssh_root_client_private_key_path }}"
+      - -N
+      - ""
+      - -C
+      - "{{ ssh_root_client_key_comment }}"
+  args:
+    creates: "{{ _ssh_root_client_private_key_path }}"
+
+- name: Check root SSH public key
+  ansible.builtin.stat:
+    path: "{{ _ssh_root_client_private_key_path }}.pub"
+  register: _ssh_root_client_public_key_stat
+
+- name: Recover root SSH public key from existing private key
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -y
+      - -f
+      - "{{ _ssh_root_client_private_key_path }}"
+  register: _ssh_root_client_recovered_public_key
+  changed_when: false
+  when: not _ssh_root_client_public_key_stat.stat.exists
+
+- name: Write recovered root SSH public key
+  ansible.builtin.copy:
+    content: "{{ _ssh_root_client_recovered_public_key.stdout }} {{ ssh_root_client_key_comment }}\n"
+    dest: "{{ _ssh_root_client_private_key_path }}.pub"
+    owner: root
+    group: root
+    mode: '0644'
+  when: not _ssh_root_client_public_key_stat.stat.exists
+
+- name: Enforce root SSH key permissions
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ _ssh_root_client_private_key_path }}"
+      mode: '0600'
+    - path: "{{ _ssh_root_client_private_key_path }}.pub"
+      mode: '0644'
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Install managed root SSH client configuration
+  ansible.builtin.template:
+    src: config.j2
+    dest: "{{ ssh_root_client_config_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when: ssh_root_client_hosts | length > 0
+
+- name: Install verified root SSH known hosts
+  ansible.builtin.template:
+    src: known_hosts.j2
+    dest: "{{ ssh_root_client_known_hosts_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when: ssh_root_client_hosts | length > 0
+
+- name: Validate managed root SSH host configurations
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -F
+      - "{{ ssh_root_client_config_path }}"
+      - -G
+      - "{{ item.name }}"
+  changed_when: false
+  loop: "{{ ssh_root_client_hosts }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ensure controller SSH key artifact directory exists
+  ansible.builtin.file:
+    path: "{{ ssh_root_client_artifact_dir }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  become: false
+
+- name: Export root SSH public key to controller artifacts
+  ansible.builtin.fetch:
+    src: "{{ _ssh_root_client_private_key_path }}.pub"
+    dest: >-
+      {{ ssh_root_client_artifact_dir }}/{{ ssh_root_client_artifact_filename }}
+    flat: true
