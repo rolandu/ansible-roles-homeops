@@ -1,0 +1,134 @@
+---
+- name: Validate Borgmatic backup platform, versions, and paths
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Debian'
+      - borgmatic_backup_borg_version is match('^[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$')
+      - borgmatic_backup_borgmatic_version is match('^[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$')
+      - borgmatic_backup_config | length > 0
+      - borgmatic_backup_python is match('^/')
+      - borgmatic_backup_install_root is match('^/')
+      - borgmatic_backup_venv_path is match('^/')
+      - borgmatic_backup_borg_path is match('^/')
+      - borgmatic_backup_borgmatic_path is match('^/')
+      - borgmatic_backup_borg_path != borgmatic_backup_borgmatic_path
+      - borgmatic_backup_config_dir is match('^/')
+      - borgmatic_backup_config_path is match('^/')
+      - borgmatic_backup_config_path is match('^' ~ (borgmatic_backup_config_dir | regex_escape) ~ '/[^/]+$')
+      - borgmatic_backup_lock_file is match('^/')
+      - borgmatic_backup_log_file is match('^/')
+      - borgmatic_backup_cron_file is match('^/etc/cron\.d/')
+      - borgmatic_backup_logrotate_file is match('^/etc/logrotate\.d/')
+      - borgmatic_backup_cron.minute | string is match('^([0-5]?[0-9]|\*)$')
+      - borgmatic_backup_cron.hour | string is match('^([01]?[0-9]|2[0-3]|\*)$')
+      - borgmatic_backup_cron.day | string is match('^[0-9*/,-]+$')
+      - borgmatic_backup_cron.month | string is match('^[0-9*/,-]+$')
+      - borgmatic_backup_cron.weekday | string is match('^[0-9*/,-]+$')
+    fail_msg: >-
+      borgmatic_backup supports Debian-family targets and requires exact
+      version strings, a non-empty configuration mapping, absolute managed
+      paths, and valid cron fields.
+  no_log: true
+
+- name: Validate Borgmatic backup package names
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | length > 0
+      - item is match('^[A-Za-z0-9][A-Za-z0-9+.-]*$')
+    fail_msg: Borgmatic backup package names must be safe non-empty strings.
+  loop: "{{ borgmatic_backup_packages }}"
+
+- name: Validate Borgmatic scheduled arguments
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is not search('[\r\n]')
+    fail_msg: Borgmatic scheduled arguments must be single-line strings.
+  loop: "{{ borgmatic_backup_run_arguments }}"
+
+- name: Install Borgmatic backup prerequisites
+  ansible.builtin.package:
+    name: "{{ borgmatic_backup_packages }}"
+    state: present
+  when:
+    - borgmatic_backup_install_packages
+    - borgmatic_backup_packages | length > 0
+
+- name: Install Borg and Borgmatic in the managed virtual environment
+  ansible.builtin.pip:
+    name:
+      - "borgbackup=={{ borgmatic_backup_borg_version }}"
+      - "borgmatic=={{ borgmatic_backup_borgmatic_version }}"
+    state: present
+    virtualenv: "{{ borgmatic_backup_venv_path }}"
+    virtualenv_command: "{{ borgmatic_backup_python }} -m venv"
+
+- name: Install stable Borg command link
+  ansible.builtin.file:
+    src: "{{ borgmatic_backup_venv_path }}/bin/borg"
+    dest: "{{ borgmatic_backup_borg_path }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+
+- name: Install stable Borgmatic command link
+  ansible.builtin.file:
+    src: "{{ borgmatic_backup_venv_path }}/bin/borgmatic"
+    dest: "{{ borgmatic_backup_borgmatic_path }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+
+- name: Ensure Borgmatic configuration directory exists
+  ansible.builtin.file:
+    path: "{{ borgmatic_backup_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Render native Borgmatic configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ borgmatic_backup_config_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+
+- name: Ensure Borgmatic backup log exists
+  ansible.builtin.file:
+    path: "{{ borgmatic_backup_log_file }}"
+    state: touch
+    owner: root
+    group: root
+    mode: "{{ borgmatic_backup_log_mode }}"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Install Borgmatic backup logrotate policy
+  ansible.builtin.template:
+    src: logrotate.j2
+    dest: "{{ borgmatic_backup_logrotate_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install Borgmatic backup cron schedule
+  ansible.builtin.template:
+    src: cron.j2
+    dest: "{{ borgmatic_backup_cron_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: borgmatic_backup_schedule_enabled
+
+- name: Remove disabled Borgmatic backup cron schedule
+  ansible.builtin.file:
+    path: "{{ borgmatic_backup_cron_file }}"
+    state: absent
+  when: not borgmatic_backup_schedule_enabled

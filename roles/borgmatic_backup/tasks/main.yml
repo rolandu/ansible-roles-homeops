@@ -1,0 +1,25 @@
+---
+- name: Validate Borgmatic backup control settings
+  ansible.builtin.assert:
+    that:
+      - borgmatic_backup_teardown | type_debug == 'bool'
+      - borgmatic_backup_install_packages | type_debug == 'bool'
+      - borgmatic_backup_schedule_enabled | type_debug == 'bool'
+      - borgmatic_backup_packages | type_debug == 'list'
+      - borgmatic_backup_config is mapping
+      - borgmatic_backup_cron is mapping
+      - borgmatic_backup_run_arguments | type_debug == 'list'
+      - borgmatic_backup_log_mode is match('^0?[0-7]{3,4}$')
+    fail_msg: >-
+      borgmatic_backup requires boolean controls, list-based package and run
+      arguments, mapping-based configuration and cron settings, and a valid
+      log mode.
+  no_log: true
+
+- name: Remove Borgmatic backup configuration
+  ansible.builtin.include_tasks: teardown.yml
+  when: borgmatic_backup_teardown
+
+- name: Configure Borgmatic backup
+  ansible.builtin.include_tasks: configure.yml
+  when: not borgmatic_backup_teardown

@@ -1,0 +1,59 @@
+---
+- name: Converge borgmatic_backup
+  hosts: role_backup
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Create Borgmatic scenario source directory
+      ansible.builtin.file:
+        path: /srv/borgmatic-test/excluded
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create Borgmatic scenario canary
+      ansible.builtin.copy:
+        content: "borgmatic scenario canary\n"
+        dest: /srv/borgmatic-test/canary.txt
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create excluded Borgmatic scenario file
+      ansible.builtin.copy:
+        content: "this file must not be restored\n"
+        dest: /srv/borgmatic-test/excluded/omitted.txt
+        owner: root
+        group: root
+        mode: '0644'
+
+  roles:
+    - role: borgmatic_backup
+      vars:
+        borgmatic_backup_config:
+          repositories:
+            - path: /var/lib/borgmatic-test-repository
+              label: local
+          source_directories:
+            - /srv/borgmatic-test
+          exclude_patterns:
+            - /srv/borgmatic-test/excluded
+          encryption_passphrase: scenario-passphrase-not-for-production
+          compression: lz4
+          keep_daily: 7
+          keep_weekly: 4
+          checks:
+            - name: repository
+            - name: archives
+        borgmatic_backup_schedule_enabled: true
+        borgmatic_backup_cron:
+          minute: "15"
+          hour: "0"
+          day: "*"
+          month: "*"
+          weekday: "*"
+        borgmatic_backup_run_arguments:
+          - create
+          - --stats

@@ -1,0 +1,10 @@
+---
+- name: Tear down borgmatic_backup
+  hosts: role_backup
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: borgmatic_backup
+      vars:
+        borgmatic_backup_teardown: true

@@ -1,0 +1,55 @@
+---
+- name: Run an arbitrary Borgmatic command on one backup host
+  hosts: "{{ borgmatic_target | default('role_backup:!disabled') }}"
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+
+  vars:
+    _borgmatic_command_binary: >-
+      {{ borgmatic_backup_borgmatic_path | default('/usr/local/bin/borgmatic') }}
+    _borgmatic_command_config: >-
+      {{ borgmatic_backup_config_path | default('/etc/borgmatic/config.yaml') }}
+    _borgmatic_command_arguments: "{{ borgmatic_cli_args | default([]) }}"
+
+  pre_tasks:
+    - name: Require exactly one selected Borgmatic host
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+        fail_msg: >-
+          Select exactly one Borgmatic host with --limit or borgmatic_target.
+      run_once: true
+
+    - name: Validate Borgmatic command arguments
+      ansible.builtin.assert:
+        that:
+          - _borgmatic_command_arguments | type_debug == 'list'
+          - _borgmatic_command_arguments | length > 0
+        fail_msg: borgmatic_cli_args must be a non-empty list of arguments.
+      run_once: true
+
+    - name: Validate each Borgmatic command argument
+      ansible.builtin.assert:
+        that:
+          - item is string
+          - item is not search('[\r\n]')
+        fail_msg: Every borgmatic_cli_args item must be a single-line string.
+      loop: "{{ _borgmatic_command_arguments }}"
+      run_once: true
+
+  tasks:
+    - name: Execute Borgmatic with the managed configuration
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [
+              _borgmatic_command_binary,
+              '--config',
+              _borgmatic_command_config
+            ]
+            + _borgmatic_command_arguments
+          }}
+      # The playbook deliberately forwards arbitrary actions and therefore
+      # cannot infer whether Borgmatic changed repository state.
+      changed_when: true

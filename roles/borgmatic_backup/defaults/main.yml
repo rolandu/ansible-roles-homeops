@@ -1,0 +1,54 @@
+---
+app_root_dir: /opt
+
+borgmatic_backup_borg_version: "1.4.4"
+borgmatic_backup_borgmatic_version: "2.1.2"
+borgmatic_backup_python: /usr/bin/python3
+borgmatic_backup_install_root: "{{ app_root_dir }}/borgmatic"
+borgmatic_backup_venv_path: "{{ borgmatic_backup_install_root }}"
+borgmatic_backup_borg_path: /usr/local/bin/borg
+borgmatic_backup_borgmatic_path: /usr/local/bin/borgmatic
+
+borgmatic_backup_install_packages: true
+borgmatic_backup_packages:
+  - build-essential
+  - ca-certificates
+  - cron
+  - libacl1
+  - libacl1-dev
+  - liblz4-dev
+  - libssl-dev
+  - libxxhash-dev
+  - libzstd-dev
+  - logrotate
+  - openssh-client
+  - python3-dev
+  - python3-msgpack
+  - python3-pip
+  - python3-pkgconfig
+  - python3-setuptools
+  - python3-venv
+  - util-linux
+
+# This mapping is serialized directly as Borgmatic YAML. The role deliberately
+# does not maintain a parallel schema for Borgmatic settings.
+borgmatic_backup_config: {}
+borgmatic_backup_config_dir: /etc/borgmatic
+borgmatic_backup_config_path: "{{ borgmatic_backup_config_dir }}/config.yaml"
+
+borgmatic_backup_lock_file: /run/lock/borgmatic-backup.lock
+borgmatic_backup_log_file: /var/log/borgmatic-backup.log
+borgmatic_backup_log_mode: '0640'
+borgmatic_backup_logrotate_file: /etc/logrotate.d/borgmatic-backup
+
+borgmatic_backup_schedule_enabled: false
+borgmatic_backup_cron_file: /etc/cron.d/borgmatic-backup
+borgmatic_backup_cron:
+  minute: "0"
+  hour: "0"
+  day: "*"
+  month: "*"
+  weekday: "*"
+borgmatic_backup_run_arguments: []
+
+borgmatic_backup_teardown: false

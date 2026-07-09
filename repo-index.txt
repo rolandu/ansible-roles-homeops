@@ -1,8 +1,11 @@
 .gitignore: Git ignore rules for editor cruft, Ansible temp files, retry files, and local artifact exports.
 AGENTS.md: Repository-specific instructions for agents, including role conventions and repository index maintenance workflow.
+BACKUP_IMPLEMENTATION_PLAN.md: Pointer to the consolidated implementation contract and operator rollout plan in the deployment repository.
+BORGMATIC_BACKUP_ROLE_PLAN.md: Requirements, boundaries, interface, test scenario, and migration plan for the narrow Borgmatic backup role.
 LICENSE: Project license text.
 README.md: Collection overview, role list, shared path conventions, linting, scenario tests, and repository index usage.
-galaxy.yml: Ansible Galaxy collection metadata, namespace, version, authorship, tags, and repository links.
+galaxy.yml: Ansible Galaxy collection metadata, namespace, version, authorship, tags, dependencies, and repository links.
+playbooks/borgmatic_command.yml: Reusable collection playbook that forwards arbitrary arguments to Borgmatic on exactly one selected host.
 repo-index.txt: Generated path index with short descriptions for Git-visible repository files.
 roles/adguardhome_docker/README.md: Role documentation for running AdGuard Home with Docker Compose and persistent app/data paths.
 roles/adguardhome_docker/defaults/main.yml: Default variables for AdGuard Home Docker install paths, DNS settings, rewrites, Compose, and teardown behavior.
@@ -19,6 +22,15 @@ roles/automatic_updates_debian_ubuntu/templates/50unattended-upgrades.j2: unatte
 roles/automatic_updates_debian_ubuntu/templates/apt-listchanges-logrotate.j2: Logrotate template for apt-listchanges history output.
 roles/automatic_updates_debian_ubuntu/templates/apt-listchanges.conf.j2: apt-listchanges configuration template for unattended update notifications.
 roles/automatic_updates_debian_ubuntu/templates/needrestart-auto.conf.j2: needrestart template for automatic restart decisions after package updates.
+roles/borgmatic_backup/README.md: Role boundaries, native configuration interface, scheduling, upgrades, operator commands, and teardown documentation.
+roles/borgmatic_backup/defaults/main.yml: Default Borg/Borgmatic versions, prerequisites, managed paths, logging, cron, and teardown controls.
+roles/borgmatic_backup/meta/main.yml: Borgmatic backup role metadata and Debian/Ubuntu compatibility baseline.
+roles/borgmatic_backup/tasks/configure.yml: Validates inputs, installs Borg/Borgmatic, renders secure configuration, and manages logging and cron.
+roles/borgmatic_backup/tasks/main.yml: Role entry point for control validation and configure or teardown selection.
+roles/borgmatic_backup/tasks/teardown.yml: Removes role-managed local Borgmatic state without touching repository data.
+roles/borgmatic_backup/templates/config.yaml.j2: Serializes the caller-owned native Borgmatic configuration mapping as YAML.
+roles/borgmatic_backup/templates/cron.j2: Direct flock-protected Borgmatic cron invocation with managed logging.
+roles/borgmatic_backup/templates/logrotate.j2: Rotation policy for the dedicated Borgmatic backup log.
 roles/certbot_hetzner/README.md: Role documentation for issuing Let's Encrypt certificates with certbot and Hetzner DNS-01 hooks.
 roles/certbot_hetzner/defaults/main.yml: Default certbot, Hetzner token, certificate domain, renewal, and hook settings.
 roles/certbot_hetzner/meta/main.yml: Role metadata for Hetzner-backed certbot certificate management.
@@ -85,6 +97,23 @@ roles/openvpn_server/tasks/server_instance.yml: Per-server tasks for packages, P
 roles/openvpn_server/templates/ccd-client.j2: OpenVPN client-specific configuration template for routed client networks.
 roles/openvpn_server/templates/client.ovpn.j2: OpenVPN client profile template exported for client hosts or users.
 roles/openvpn_server/templates/server.conf.j2: OpenVPN server configuration template for listener, network, routes, DNS, and crypto settings.
+roles/resticprofile_backup/README.md: Multi-target inputs, Gatus reporting, security, scheduling, teardown, and manual workflow.
+roles/resticprofile_backup/defaults/main.yml: Default release, multi-target, Gatus, backup policy, retention, paths, logging, and cron settings.
+roles/resticprofile_backup/meta/main.yml: Role metadata and supported Debian/Ubuntu platform baseline.
+roles/resticprofile_backup/tasks/configure.yml: Validates targets, installs Resticprofile, and manages secure profiles, Gatus hooks, logging, and cron.
+roles/resticprofile_backup/tasks/main.yml: Role entry point for control validation and configure or teardown selection.
+roles/resticprofile_backup/tasks/teardown.yml: Removes role-managed local Resticprofile files without touching repository data.
+roles/resticprofile_backup/templates/cron.j2: Explicit root cron entries for optional Restic backup and check schedules.
+roles/resticprofile_backup/templates/environment.j2: Root-only dotenv file for per-target Restic backend credentials.
+roles/resticprofile_backup/templates/logrotate.j2: Rotation policy for the dedicated Resticprofile backup log.
+roles/resticprofile_backup/templates/profiles.yaml.j2: Secure YAML rendering of the effective Resticprofile configuration.
+roles/resticprofile_backup/templates/run-resticprofile.sh.j2: Locked command wrapper for supported Resticprofile operations.
+roles/ssh_root_client/README.md: Role contract, server schema, host-key requirements, public-key export, and manual remote setup workflow.
+roles/ssh_root_client/defaults/main.yml: Default root identity, SSH paths, controller artifact path, server list, and keepalive settings.
+roles/ssh_root_client/meta/main.yml: Role metadata for managed outbound root SSH access.
+roles/ssh_root_client/tasks/main.yml: Validates servers, generates root's key, writes trusted SSH configuration, and exports the public key.
+roles/ssh_root_client/templates/config.j2: Root SSH client configuration for one or more declared aliases.
+roles/ssh_root_client/templates/known_hosts.j2: Verified known-host entries with custom-port support.
 roles/ssh_user_keys_generate/README.md: Role documentation for generating an SSH key for the current SSH user and exporting its public key.
 roles/ssh_user_keys_generate/defaults/main.yml: Default SSH key type, path, permissions, comment, force behavior, and controller export location.
 roles/ssh_user_keys_generate/meta/main.yml: Role metadata for SSH user key generation.
@@ -131,6 +160,16 @@ tests/scenarios/_common/ubuntu-ssh-target/Dockerfile: Shared Ubuntu SSH target i
 tests/scenarios/automatic_updates_debian_ubuntu/converge.yml: Scenario converge playbook for the automatic updates role.
 tests/scenarios/automatic_updates_debian_ubuntu/run.sh: Docker-backed scenario runner for the automatic updates role.
 tests/scenarios/automatic_updates_debian_ubuntu/verify.yml: Scenario verification playbook for automatic updates configuration.
+tests/scenarios/borgmatic_backup/converge.yml: Scenario configuration with a local repository, canary source, exclusion, and enabled cron schedule.
+tests/scenarios/borgmatic_backup/run.sh: Docker-backed runner for install, idempotence, command forwarding, backup, restore, and teardown.
+tests/scenarios/borgmatic_backup/teardown.yml: Scenario playbook enabling explicit Borgmatic role teardown.
+tests/scenarios/borgmatic_backup/verify.yml: Scenario assertions plus explicit local repository creation, backup, check, listing, and canary restore.
+tests/scenarios/borgmatic_backup/verify_teardown.yml: Verifies role-owned files are removed while the local Borg repository remains intact.
+tests/scenarios/resticprofile_backup/converge.yml: Scenario with two local targets, per-target Gatus hooks, and a canary source.
+tests/scenarios/resticprofile_backup/run.sh: Docker-backed scenario runner for configuration, idempotence, restore, and teardown.
+tests/scenarios/resticprofile_backup/teardown.yml: Scenario playbook enabling explicit role teardown.
+tests/scenarios/resticprofile_backup/verify.yml: Scenario assertions plus a real local Restic backup, check, and canary restore.
+tests/scenarios/resticprofile_backup/verify_teardown.yml: Scenario assertions that role-owned local files were removed.
 tests/scenarios/ssh_user_keys_generate/converge.yml: Scenario converge playbook for SSH key generation.
 tests/scenarios/ssh_user_keys_generate/run.sh: Docker-backed scenario runner for SSH user key generation.
 tests/scenarios/ssh_user_keys_generate/verify.yml: Scenario verification playbook for generated SSH keys and exported public keys.
