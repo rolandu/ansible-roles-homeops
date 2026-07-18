@@ -64,12 +64,9 @@
       ansible.builtin.command:
         argv: >-
           {{
-            [
-              _borgmatic_command_binary,
-              '--config',
-              _borgmatic_command_config
-            ]
+            [_borgmatic_command_binary]
             + borgmatic_cli_args
+            + ['--config', _borgmatic_command_config]
           }}
       environment:
         NO_COLOR: "1"
@@ -85,8 +82,8 @@
       ansible.builtin.command:
         cmd: >-
           {{ _borgmatic_command_binary | quote }}
-          --config {{ _borgmatic_command_config | quote }}
           {{ borgmatic_cli }}
+          --config {{ _borgmatic_command_config | quote }}
       environment:
         NO_COLOR: "1"
       register: _borgmatic_command_result
