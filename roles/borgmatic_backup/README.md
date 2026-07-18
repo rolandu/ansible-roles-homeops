@@ -66,6 +66,11 @@ Multiple repositories use Borgmatic's native repository list and are processed
 according to Borgmatic's behavior. Give repositories labels so operators can
 select one through `--repository`.
 
+Repository entries should use Borgmatic's native mapping form, for example
+`{path: ssh://backup/./borg, label: offsite}`. The role does not normalize
+shorthand repository strings; callers should pass the exact structure they
+want written to Borgmatic's configuration.
+
 The role only validates that the top-level value is a non-empty mapping.
 Borgmatic remains the source of truth for its supported keys and semantics.
 This allows new Borgmatic features, including native hooks and monitoring
@@ -152,14 +157,18 @@ repository.
 ## Operator commands from the controller
 
 The collection ships the generic `rolandu.homeops.borgmatic_command` playbook.
-It targets one selected inventory host as root and forwards a non-empty list of
-arguments to Borgmatic without interpreting or reordering them:
+It targets one selected inventory host as root and forwards either a simple
+command string or a non-empty argument list to Borgmatic. Use `borgmatic_cli`
+for normal operator use:
 
 ```bash
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["config","validate"]}'
+  -e 'borgmatic_cli=config validate'
 ```
+
+Use `borgmatic_cli_args` when exact argument boundaries matter, for example
+when an argument contains spaces. Do not set both variables in the same run.
 
 Additional examples:
 
@@ -167,34 +176,36 @@ Additional examples:
 # Initialize one manually provisioned repository.
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["repo-create","--encryption","repokey-blake2","--repository","offsite"]}'
+  -e 'borgmatic_cli=repo-create --encryption repokey-blake2 --repository offsite'
 
 # Dry-run creation, then create an archive.
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["--dry-run","create","--repository","offsite"]}'
+  -e 'borgmatic_cli=--dry-run create --repository offsite'
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["create","--repository","offsite","--stats"]}'
+  -e 'borgmatic_cli=create --repository offsite --stats'
 
 # Inspect and check the repository.
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["repo-list","--repository","offsite"]}'
+  -e 'borgmatic_cli=repo-list --repository offsite'
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["check","--repository","offsite"]}'
+  -e 'borgmatic_cli=check --repository offsite'
 
 # Restore the latest archive into an existing destination.
 ansible-playbook rolandu.homeops.borgmatic_command \
   --limit server01 \
-  -e '{"borgmatic_cli_args":["extract","--repository","offsite","--archive","latest","--destination","/tmp/borg-restore"]}'
+  -e 'borgmatic_cli=extract --repository offsite --archive latest --destination /tmp/borg-restore'
 ```
 
 The collection playbook refuses to execute against more than one host. It does
 not validate Borgmatic actions, so consult the help for the installed version.
-Do not put secrets in command arguments; use the protected configuration or
-Borgmatic credential commands.
+It prints Borgmatic stdout and stderr separately and then fails with a concise
+return-code message when Borgmatic exits non-zero. Do not put secrets in
+command arguments; use the protected configuration or Borgmatic credential
+commands.
 
 ## Upgrade process
 
