@@ -1,0 +1,91 @@
+---
+app_root_dir: /opt
+
+resticprofile_version: "0.33.1"
+resticprofile_architecture_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armv7
+resticprofile_checksums:
+  amd64: 1d7027d15e3e2456e585a210f811d0f72ec40f6b3388f00425642ed579165d70
+  arm64: 58e4fd6fbe2bd460ee6823c3693f39a10f0f24c90635f0215c19b0ab20bbf5df
+  armv7: df7b9607d25b7c7210580002e781ff5d880afded63f1522336bd52c325bb4c91
+resticprofile_release_base_url: >-
+  https://github.com/creativeprojects/resticprofile/releases/download/v{{ resticprofile_version }}
+resticprofile_install_root: "{{ app_root_dir }}/resticprofile"
+resticprofile_release_dir: >-
+  {{ resticprofile_install_root }}/releases/{{ resticprofile_version }}
+resticprofile_download_dir: /var/cache/resticprofile
+resticprofile_binary_path: /usr/local/bin/resticprofile
+
+resticprofile_install_packages: true
+resticprofile_packages:
+  - ca-certificates
+  - cron
+  - logrotate
+  - restic
+  - util-linux
+
+resticprofile_config_dir: /etc/resticprofile
+resticprofile_config_path: "{{ resticprofile_config_dir }}/profiles.yaml"
+resticprofile_group_name: all
+resticprofile_group_continue_on_error: true
+
+# Each target requires name, repository, and password. Optional environment,
+# extra_config, gatus_endpoint_key, and gatus_token values are target-specific.
+resticprofile_targets: []
+
+resticprofile_gatus_enabled: false
+resticprofile_gatus_url: ""
+resticprofile_gatus_endpoint_key: ""
+resticprofile_gatus_token: ""
+
+resticprofile_sources:
+  - /srv
+  - /etc
+  - /var
+  - /home
+  - /root
+resticprofile_excludes:
+  - /var/log
+  - /var/cache
+  - /var/tmp
+  - /var/lib/docker
+  - /var/lib/containerd
+  - /var/lib/containers
+  - /home/*/.cache
+  - /root/.cache
+resticprofile_one_file_system: false
+resticprofile_tags:
+  - "{{ inventory_hostname }}"
+resticprofile_retention:
+  keep-daily: 7
+  keep-weekly: 4
+  keep-monthly: 12
+  keep-yearly: 3
+resticprofile_extra_config: {}
+
+resticprofile_script_dir: "{{ resticprofile_install_root }}/bin"
+resticprofile_script_path: "{{ resticprofile_script_dir }}/run-resticprofile"
+resticprofile_lock_file: /run/lock/resticprofile-backup.lock
+resticprofile_log_file: /var/log/resticprofile-backup.log
+resticprofile_log_mode: '0640'
+resticprofile_cron_file: /etc/cron.d/resticprofile-backup
+resticprofile_logrotate_file: /etc/logrotate.d/resticprofile-backup
+
+resticprofile_schedule_enabled: false
+resticprofile_backup_cron:
+  minute: "0"
+  hour: "12"
+  day: "*"
+  month: "*"
+  weekday: "*"
+resticprofile_check_schedule_enabled: false
+resticprofile_check_cron:
+  minute: "0"
+  hour: "6"
+  day: "*"
+  month: "*"
+  weekday: "0"
+
+resticprofile_teardown: false

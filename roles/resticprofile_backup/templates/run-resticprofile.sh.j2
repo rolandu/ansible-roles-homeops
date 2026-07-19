@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME=/root
+export PATH HOME
+umask 077
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: $0 [--profile NAME] {backup|check|forget|init|prune|restore|snapshots|stats} [arguments...]" >&2
+  exit 64
+fi
+
+profile_name={{ resticprofile_group_name | quote }}
+if [ "$1" = "--profile" ]; then
+  if [ "$#" -lt 3 ]; then
+    echo "--profile requires a profile name and command" >&2
+    exit 64
+  fi
+  profile_name="$2"
+  shift 2
+  case "$profile_name" in
+    *[!A-Za-z0-9_.-]*|'')
+      echo "invalid Resticprofile profile name" >&2
+      exit 64
+      ;;
+  esac
+fi
+
+command_name="$1"
+shift
+
+case "$command_name" in
+  backup|check|forget|init|prune|restore|snapshots|stats)
+    ;;
+  *)
+    echo "unsupported Resticprofile command: $command_name" >&2
+    exit 64
+    ;;
+esac
+
+exec flock -n {{ resticprofile_lock_file | quote }} \
+  {{ resticprofile_binary_path | quote }} \
+  -c {{ resticprofile_config_path | quote }} \
+  -n "$profile_name" \
+  "$command_name" "$@"

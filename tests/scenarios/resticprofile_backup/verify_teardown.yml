@@ -1,0 +1,26 @@
+---
+- name: Verify resticprofile_backup teardown
+  hosts: resticprofile_backup_targets
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Inspect removed Resticprofile files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/resticprofile
+        - /etc/resticprofile
+        - /opt/resticprofile
+        - /etc/cron.d/resticprofile-backup
+        - /etc/logrotate.d/resticprofile-backup
+        - /var/log/resticprofile-backup.log
+      register: removed_resticprofile_files
+
+    - name: Assert Resticprofile files were removed
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+      loop: "{{ removed_resticprofile_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"

@@ -1,0 +1,4 @@
+# Managed by Ansible. This file may contain secrets.
+{% for environment_item in _resticprofile_environment | dict2items | sort(attribute='key') %}
+{{ environment_item.key }}={{ environment_item.value | string | quote }}
+{% endfor %}

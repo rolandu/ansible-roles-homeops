@@ -5,7 +5,6 @@ BORGMATIC_BACKUP_ROLE_PLAN.md: Requirements, boundaries, interface, test scenari
 LICENSE: Project license text.
 README.md: Collection overview, role list, shared path conventions, linting, scenario tests, and repository index usage.
 galaxy.yml: Ansible Galaxy collection metadata, namespace, version, authorship, tags, dependencies, and repository links.
-playbooks/borgmatic_command.yml: Reusable collection playbook that forwards arbitrary arguments to Borgmatic on exactly one selected host.
 repo-index.txt: Generated path index with short descriptions for Git-visible repository files.
 roles/adguardhome_docker/README.md: Role documentation for running AdGuard Home with Docker Compose and persistent app/data paths.
 roles/adguardhome_docker/defaults/main.yml: Default variables for AdGuard Home Docker install paths, DNS settings, rewrites, Compose, and teardown behavior.

@@ -1,0 +1,128 @@
+---
+- name: Verify resticprofile_backup
+  hosts: resticprofile_backup_targets
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Inspect managed Resticprofile files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/resticprofile
+        - /etc/resticprofile
+        - /etc/resticprofile/profiles.yaml
+        - /etc/resticprofile/repository-password-primary
+        - /etc/resticprofile/repository-password-secondary
+        - /etc/resticprofile/environment-primary
+        - /opt/resticprofile/bin/run-resticprofile
+        - /etc/cron.d/resticprofile-backup
+        - /etc/logrotate.d/resticprofile-backup
+        - /var/log/resticprofile-backup.log
+      register: resticprofile_managed_files
+
+    - name: Read managed Resticprofile configuration
+      ansible.builtin.slurp:
+        src: /etc/resticprofile/profiles.yaml
+      register: resticprofile_config_file
+
+    - name: Read managed Resticprofile cron file
+      ansible.builtin.slurp:
+        src: /etc/cron.d/resticprofile-backup
+      register: resticprofile_cron_file_content
+
+    - name: Assert managed Resticprofile state
+      ansible.builtin.assert:
+        that:
+          - managed_stats['/usr/local/bin/resticprofile'].mode == '0755'
+          - managed_stats['/etc/resticprofile'].mode == '0700'
+          - managed_stats['/etc/resticprofile/profiles.yaml'].mode == '0600'
+          - managed_stats['/etc/resticprofile/repository-password-primary'].mode == '0600'
+          - managed_stats['/etc/resticprofile/repository-password-secondary'].mode == '0600'
+          - managed_stats['/etc/resticprofile/environment-primary'].mode == '0600'
+          - managed_stats['/opt/resticprofile/bin/run-resticprofile'].mode == '0750'
+          - managed_stats['/etc/cron.d/resticprofile-backup'].mode == '0644'
+          - managed_stats['/etc/logrotate.d/resticprofile-backup'].mode == '0644'
+          - managed_stats['/var/log/resticprofile-backup.log'].mode == '0640'
+          - config_text is search('/var/lib/resticprofile-test-primary')
+          - config_text is search('/var/lib/resticprofile-test-secondary')
+          - config_text is search('/srv/resticprofile-test')
+          - config_text is search('/srv/resticprofile-test/excluded')
+          - config_text is search('one-file-system: false')
+          - config_text is search('keep-monthly: 12')
+          - config_text is search('keep-yearly: 3')
+          - config_text is search('password-file: /etc/resticprofile/repository-password-primary')
+          - config_text is search('password-file: /etc/resticprofile/repository-password-secondary')
+          - config_text is search('all:')
+          - config_text is search('- primary')
+          - config_text is search('- secondary')
+          - config_text is search('/api/v1/endpoints/scenario_primary/external')
+          - config_text is search('/api/v1/endpoints/scenario_secondary/external')
+          - config_text is search('success=true')
+          - config_text is search('success=false')
+          - config_text is search('Resticprofile%20backup%20failed')
+          - config_text is search('Bearer scenario-primary-gatus-token')
+          - config_text is search('Bearer scenario-secondary-gatus-token')
+          - config_text is not search('scenario-primary-password-not-for-production')
+          - config_text is not search('scenario-secondary-password-not-for-production')
+          - cron_text is search('15 12 \\* \\* \\* root')
+      vars:
+        managed_stats: >-
+          {{ resticprofile_managed_files.results
+             | items2dict(key_name='item', value_name='stat') }}
+        config_text: "{{ resticprofile_config_file.content | b64decode }}"
+        cron_text: "{{ resticprofile_cron_file_content.content | b64decode }}"
+
+    - name: Initialize temporary Restic repositories
+      ansible.builtin.command:
+        argv:
+          - /opt/resticprofile/bin/run-resticprofile
+          - init
+      register: resticprofile_init
+      changed_when: resticprofile_init.rc == 0
+
+    - name: Back up the scenario canary
+      ansible.builtin.command:
+        argv:
+          - /opt/resticprofile/bin/run-resticprofile
+          - backup
+      register: resticprofile_backup
+      changed_when: resticprofile_backup.rc == 0
+
+    - name: Check the temporary Restic repositories
+      ansible.builtin.command:
+        argv:
+          - /opt/resticprofile/bin/run-resticprofile
+          - check
+      changed_when: false
+
+    - name: Create restore destination
+      ansible.builtin.file:
+        path: /tmp/resticprofile-restore
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Restore the scenario canary
+      ansible.builtin.command:
+        argv:
+          - /opt/resticprofile/bin/run-resticprofile
+          - --profile
+          - primary
+          - restore
+          - latest
+          - --target
+          - /tmp/resticprofile-restore
+      register: resticprofile_restore
+      changed_when: resticprofile_restore.rc == 0
+
+    - name: Read restored scenario canary
+      ansible.builtin.slurp:
+        src: /tmp/resticprofile-restore/srv/resticprofile-test/canary.txt
+      register: restored_canary
+
+    - name: Assert scenario canary was restored
+      ansible.builtin.assert:
+        that:
+          - restored_canary.content | b64decode == "resticprofile scenario canary\n"

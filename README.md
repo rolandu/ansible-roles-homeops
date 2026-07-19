@@ -87,10 +87,8 @@ being checked, runs `ansible-lint` per role, and exits non-zero if any role has
 lint failures.
 
 There are still no committed production inventories, deployment caller
-playbooks, Molecule scenarios, or CI jobs in this repository. The collection
-does include reusable collection playbooks, including
-`rolandu.homeops.borgmatic_command` for forwarding arbitrary arguments to
-Borgmatic on one selected inventory host.
+playbooks, Molecule scenarios, CI jobs, or operational command-wrapper
+playbooks in this repository.
 
 ### Docker scenario tests
 
