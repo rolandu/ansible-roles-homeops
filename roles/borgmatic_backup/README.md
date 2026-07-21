@@ -114,13 +114,15 @@ and the configuration file is mode `'0600'`.
   defaults to `false`.
 - `borgmatic_backup_cron_file`: managed file below `/etc/cron.d`.
 - `borgmatic_backup_cron`: `minute`, `hour`, `day`, `month`, and `weekday`.
-- `borgmatic_backup_run_arguments`: list of arguments appended to the scheduled
-  Borgmatic invocation. An empty list runs Borgmatic's configured default
-  action sequence.
+- `borgmatic_backup_run_arguments`: list of Borgmatic action arguments for the
+  scheduled invocation. An empty list runs Borgmatic's configured default action
+  sequence.
 
-Cron invokes the managed Borgmatic binary directly with its configuration,
-prefixed by `flock -n`. Concurrent scheduled invocations fail instead of
-overlapping. Output is appended to the dedicated log and managed by logrotate.
+Cron invokes the managed Borgmatic binary directly, prefixed by `flock -n`.
+Action arguments are placed before the managed `--config` flag to avoid
+ambiguous parsing on Borgmatic versions where `--config` can consume multiple
+values. Concurrent scheduled invocations fail instead of overlapping. Output is
+appended to the dedicated log and managed by logrotate.
 
 ### Teardown
 
@@ -156,56 +158,55 @@ repository.
 
 ## Operator commands from the controller
 
-The collection ships the generic `rolandu.homeops.borgmatic_command` playbook.
-It targets one selected inventory host as root and forwards either a simple
-command string or a non-empty argument list to Borgmatic. Use `borgmatic_cli`
-for normal operator use:
+This role does not ship an operational wrapper for Borgmatic commands. Use a
+normal Ansible ad-hoc command from the caller repository, or a caller-local
+script that wraps the same pattern:
 
 ```bash
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=config validate'
+ansible server01 \
+  -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic config validate --config /etc/borgmatic/config.yaml' \
+  -b
 ```
 
-Use `borgmatic_cli_args` when exact argument boundaries matter, for example
-when an argument contains spaces. Do not set both variables in the same run.
+Run these commands against one host at a time unless you intentionally want to
+operate on multiple repositories/hosts. The command module runs the binary
+directly; shell operators such as pipes, redirects, globbing, and environment
+assignment are not interpreted.
 
 Additional examples:
 
 ```bash
 # Initialize one manually provisioned repository.
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=repo-create --encryption repokey-blake2 --repository offsite'
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic repo-create --encryption repokey-blake2 --repository offsite --config /etc/borgmatic/config.yaml' \
+  -b
 
 # Dry-run creation, then create an archive.
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=--dry-run create --repository offsite'
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=create --repository offsite --stats'
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic --dry-run create --repository offsite --config /etc/borgmatic/config.yaml' \
+  -b
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic create --repository offsite --stats --config /etc/borgmatic/config.yaml' \
+  -b
 
 # Inspect and check the repository.
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=repo-list --repository offsite'
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=check --repository offsite'
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic repo-list --repository offsite --config /etc/borgmatic/config.yaml' \
+  -b
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic check --repository offsite --config /etc/borgmatic/config.yaml' \
+  -b
 
 # Restore the latest archive into an existing destination.
-ansible-playbook rolandu.homeops.borgmatic_command \
-  --limit server01 \
-  -e 'borgmatic_cli=extract --repository offsite --archive latest --destination /tmp/borg-restore'
+ansible server01 -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic extract --repository offsite --archive latest --destination /tmp/borg-restore --config /etc/borgmatic/config.yaml' \
+  -b
 ```
 
-The collection playbook refuses to execute against more than one host. It does
-not validate Borgmatic actions, so consult the help for the installed version.
-It prints Borgmatic stdout and stderr separately and then fails with a concise
-return-code message when Borgmatic exits non-zero. Do not put secrets in
-command arguments; use the protected configuration or Borgmatic credential
-commands.
+Consult the help for the installed Borgmatic version before running destructive
+or repository-modifying actions. Do not put secrets in command arguments; use
+the protected configuration or Borgmatic credential commands.
 
 ## Upgrade process
 

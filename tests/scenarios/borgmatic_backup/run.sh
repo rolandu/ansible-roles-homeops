@@ -89,12 +89,13 @@ if ! grep -Eq "changed=0 .*failed=0" "${idempotence_log}"; then
   exit 1
 fi
 
-echo "=== generic command playbook: borgmatic config validate ==="
-ansible-playbook \
+echo "=== ad-hoc command: borgmatic config validate ==="
+ansible \
   -i "${inventory_file}" \
-  "${repo_root}/playbooks/borgmatic_command.yml" \
-  --limit borgmatic-target \
-  --extra-vars '{"borgmatic_target":"role_backup","borgmatic_cli_args":["config","validate"]}'
+  borgmatic-target \
+  -m ansible.builtin.command \
+  -a '/usr/local/bin/borgmatic config validate --config /etc/borgmatic/config.yaml' \
+  -b
 
 echo "=== verify: borgmatic_backup ==="
 ansible-playbook -i "${inventory_file}" "${scenario_dir}/verify.yml"

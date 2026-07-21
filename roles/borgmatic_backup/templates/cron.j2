@@ -12,8 +12,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   '/usr/bin/flock',
   '-n',
   borgmatic_backup_lock_file,
-  borgmatic_backup_borgmatic_path,
+  borgmatic_backup_borgmatic_path
+] + borgmatic_backup_run_arguments + [
   '--config',
   borgmatic_backup_config_path
-] + borgmatic_backup_run_arguments %}
+] %}
 {{ schedule }} root {% for argument in command %}{{ argument | quote }}{% if not loop.last %} {% endif %}{% endfor %} >> {{ borgmatic_backup_log_file | quote }} 2>&1

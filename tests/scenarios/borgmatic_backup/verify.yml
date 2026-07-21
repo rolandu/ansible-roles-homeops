@@ -70,8 +70,7 @@
           - cron_text is search('/usr/bin/flock')
           - cron_text is search('/run/lock/borgmatic-backup.lock')
           - cron_text is search('/usr/local/bin/borgmatic')
-          - cron_text is search('--config /etc/borgmatic/config.yaml')
-          - cron_text is search('create --stats')
+          - cron_text is search('create --stats --config /etc/borgmatic/config.yaml')
           - logrotate_text is search('/var/log/borgmatic-backup.log')
           - borgmatic_borg_version.stdout is search('1\\.4\\.4')
           - borgmatic_version.stdout is search('2\\.1\\.2')
@@ -87,13 +86,13 @@
       ansible.builtin.command:
         argv:
           - /usr/local/bin/borgmatic
-          - --config
-          - /etc/borgmatic/config.yaml
           - repo-create
           - --encryption
           - repokey-blake2
           - --repository
           - local
+          - --config
+          - /etc/borgmatic/config.yaml
       register: borgmatic_repo_create
       changed_when: borgmatic_repo_create.rc == 0
 
@@ -101,12 +100,12 @@
       ansible.builtin.command:
         argv:
           - /usr/local/bin/borgmatic
-          - --config
-          - /etc/borgmatic/config.yaml
           - create
           - --repository
           - local
           - --stats
+          - --config
+          - /etc/borgmatic/config.yaml
       register: borgmatic_create
       changed_when: borgmatic_create.rc == 0
 
@@ -114,23 +113,23 @@
       ansible.builtin.command:
         argv:
           - /usr/local/bin/borgmatic
-          - --config
-          - /etc/borgmatic/config.yaml
           - check
           - --repository
           - local
           - --force
+          - --config
+          - /etc/borgmatic/config.yaml
       changed_when: false
 
     - name: List temporary Borg repository archives
       ansible.builtin.command:
         argv:
           - /usr/local/bin/borgmatic
-          - --config
-          - /etc/borgmatic/config.yaml
           - repo-list
           - --repository
           - local
+          - --config
+          - /etc/borgmatic/config.yaml
       register: borgmatic_repo_list
       changed_when: false
 
@@ -151,8 +150,6 @@
       ansible.builtin.command:
         argv:
           - /usr/local/bin/borgmatic
-          - --config
-          - /etc/borgmatic/config.yaml
           - extract
           - --repository
           - local
@@ -160,6 +157,8 @@
           - latest
           - --destination
           - /tmp/borgmatic-restore
+          - --config
+          - /etc/borgmatic/config.yaml
       register: borgmatic_extract
       changed_when: borgmatic_extract.rc == 0
 
