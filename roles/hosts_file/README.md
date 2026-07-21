@@ -39,16 +39,16 @@ Each `hosts_file_rewrites` entry supports:
     - role: hosts_file
       vars:
         hosts_file_rewrites:
-          - domain: monitoring.rolandu.net
-            answer: 192.168.1.20
+          - domain: monitoring.example.net
+            answer: 192.0.2.20
 ```
 
 Reuse AdGuard Home rewrites directly:
 
 ```yaml
 adguard_rewrites:
-  - domain: monitoring.rolandu.net
-    answer: 192.168.1.20
+  - domain: monitoring.example.net
+    answer: 192.0.2.20
 
 hosts_file_rewrites: "{{ adguard_rewrites }}"
 ```
