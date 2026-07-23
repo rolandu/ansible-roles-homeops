@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -u
+set -o pipefail
+
+VPN_CONNECTION={{ openvpn_client_connection_name | quote }}
+DIG_TARGET={{ openvpn_client_watchdog_dig_target | quote }}
+PING_TARGET={{ openvpn_client_watchdog_ping_target | quote }}
+LOCK_FILE={{ openvpn_client_watchdog_lock_path | quote }}
+
+log() {
+  printf '[%s] %s\n' "$(date -Iseconds)" "$*"
+}
+
+exec 9>"${LOCK_FILE}"
+flock -n 9 || exit 0
+
+dig_result="$(dig +time=3 +tries=1 "${DIG_TARGET}" A +short 2>/dev/null || true)"
+if [[ -n "${dig_result}" ]]; then
+  dig_ok=true
+else
+  dig_ok=false
+fi
+
+if ping -c 1 -W 3 "${PING_TARGET}" >/dev/null 2>&1; then
+  ping_ok=true
+else
+  ping_ok=false
+fi
+
+if [[ "${dig_ok}" == "true" && "${ping_ok}" == "true" ]]; then
+  exit 0
+fi
+
+log "Watchdog check failed for ${VPN_CONNECTION}: dig=${dig_ok} ping=${ping_ok}; restarting"
+
+if ! nmcli connection down "${VPN_CONNECTION}"; then
+  log "Could not deactivate ${VPN_CONNECTION}; attempting activation anyway"
+fi
+
+if nmcli connection up "${VPN_CONNECTION}"; then
+  log "Restarted ${VPN_CONNECTION} successfully"
+else
+  log "Failed to restart ${VPN_CONNECTION}"
+  exit 1
+fi

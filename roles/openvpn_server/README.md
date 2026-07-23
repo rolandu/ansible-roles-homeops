@@ -37,6 +37,10 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
     - `revoke` (bool, default `false`): when `true`, revoke the client certificate (if it exists) and refresh the CRL.
     - `dns_helper_script_override` (string, optional; default empty): absolute path to a DNS helper script on the client. When set, the client role uses this path directly and skips helper auto-discovery.
     - `prefer_vpn_dns` (bool, default `true`; impacts NetworkManager clients by setting DNS priority. The OpenVPN systemd client path now always applies pushed DNS using either `systemd-resolved` or `update-resolv-conf` automatically.)
+    - `watchdog_enabled` (bool, default `false`): enable the `openvpn_client` NetworkManager watchdog for this client.
+    - `watchdog_interval` (string, default `*/5 * * * *`): five-field watchdog cron schedule.
+    - `watchdog_dig_target` (string, optional): watchdog DNS lookup target; defaults to the effective `openvpn_remote_host`.
+    - `watchdog_ping_target` (string, optional): watchdog ping target; defaults to the first configured VPN DNS server.
 - `openvpn_default_*` variables control defaults applied when the fields above are omitted:
   - `openvpn_default_port` (default: `1194`), `openvpn_default_proto` (default: `udp`), `openvpn_default_dual_stack` (default: `true`), `openvpn_default_full_tunnel` (default: `false`).
   - `openvpn_default_client_export_dir` (default: `/root/openvpn-clients`)

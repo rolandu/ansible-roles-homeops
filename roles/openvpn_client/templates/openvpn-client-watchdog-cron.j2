@@ -1,0 +1,7 @@
+# Check and repair the NetworkManager OpenVPN connection.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# minute hour day month weekday user command
+{{ openvpn_client_watchdog_interval }} root {{ openvpn_client_watchdog_script_path | quote }} >>{{ openvpn_client_watchdog_log_path | quote }} 2>&1

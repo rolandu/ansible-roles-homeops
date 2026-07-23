@@ -1,0 +1,198 @@
+---
+- name: Verify OpenVPN client watchdog
+  hosts: openvpn_client_targets
+  become: true
+  gather_facts: false
+
+  vars:
+    watchdog_name: scenario_vpn_client_watchdog
+    watchdog_script: /usr/local/sbin/scenario_vpn_client_watchdog.sh
+    watchdog_cron: /etc/cron.d/openvpn-client-scenario_vpn_client_watchdog
+    watchdog_log: /var/log/openvpn-client-scenario_vpn_client_watchdog.log
+    watchdog_logrotate: /etc/logrotate.d/openvpn-client-scenario_vpn_client_watchdog
+    watchdog_lock: /run/scenario_vpn_client_watchdog.lock
+    nmcli_calls: /tmp/scenario-nmcli-calls
+    dig_fail_marker: /tmp/scenario-dig-fail
+    ping_fail_marker: /tmp/scenario-ping-fail
+
+  tasks:
+    - name: Inspect managed watchdog files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ watchdog_script }}"
+        - "{{ watchdog_cron }}"
+        - "{{ watchdog_log }}"
+        - "{{ watchdog_logrotate }}"
+      register: watchdog_files
+
+    - name: Assert managed watchdog files and modes
+      ansible.builtin.assert:
+        that:
+          - watchdog_files.results[0].stat.exists
+          - watchdog_files.results[0].stat.mode == '0755'
+          - watchdog_files.results[1].stat.exists
+          - watchdog_files.results[1].stat.mode == '0644'
+          - watchdog_files.results[2].stat.exists
+          - watchdog_files.results[2].stat.mode == '0640'
+          - watchdog_files.results[3].stat.exists
+          - watchdog_files.results[3].stat.mode == '0644'
+
+    - name: Read rendered watchdog files
+      ansible.builtin.slurp:
+        path: "{{ item }}"
+      loop:
+        - "{{ watchdog_script }}"
+        - "{{ watchdog_cron }}"
+        - "{{ watchdog_logrotate }}"
+      register: watchdog_contents
+
+    - name: Assert rendered watchdog values
+      ansible.builtin.assert:
+        that:
+          - (watchdog_contents.results[0].content | b64decode) is search('VPN_CONNECTION=scenario_vpn_client')
+          - (watchdog_contents.results[0].content | b64decode) is search('DIG_TARGET=vpn.example.test')
+          - (watchdog_contents.results[0].content | b64decode) is search('PING_TARGET=10.200.0.1')
+          - (watchdog_contents.results[1].content | b64decode) is search('\\*/5 \\* \\* \\* \\* root')
+          - (watchdog_contents.results[2].content | b64decode) is search(watchdog_log | regex_escape)
+
+    - name: Install scenario command stubs
+      ansible.builtin.copy:
+        dest: "/usr/local/bin/{{ item.name }}"
+        owner: root
+        group: root
+        mode: '0755'
+        content: "{{ item.content }}"
+      loop:
+        - name: dig
+          content: |
+            #!/usr/bin/env bash
+            if [[ -e /tmp/scenario-dig-fail ]]; then
+              exit 1
+            fi
+            printf '192.0.2.10\n'
+        - name: ping
+          content: |
+            #!/usr/bin/env bash
+            [[ ! -e /tmp/scenario-ping-fail ]]
+        - name: nmcli
+          content: |
+            #!/usr/bin/env bash
+            printf '%s\n' "$*" >> /tmp/scenario-nmcli-calls
+
+    - name: Reset scenario failure state
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ nmcli_calls }}"
+        - "{{ dig_fail_marker }}"
+        - "{{ ping_fail_marker }}"
+
+    - name: Run healthy watchdog check
+      ansible.builtin.command: "{{ watchdog_script }}"
+      changed_when: false
+
+    - name: Check that healthy run did not call nmcli
+      ansible.builtin.stat:
+        path: "{{ nmcli_calls }}"
+      register: healthy_nmcli_calls
+
+    - name: Assert healthy run made no repair
+      ansible.builtin.assert:
+        that:
+          - not healthy_nmcli_calls.stat.exists
+
+    - name: Make DNS check fail
+      ansible.builtin.file:
+        path: "{{ dig_fail_marker }}"
+        state: touch
+        mode: '0600'
+
+    - name: Run watchdog with failed DNS check
+      ansible.builtin.command: "{{ watchdog_script }}"
+      changed_when: true
+
+    - name: Read DNS-failure nmcli calls
+      ansible.builtin.slurp:
+        path: "{{ nmcli_calls }}"
+      register: dig_failure_calls
+
+    - name: Assert DNS failure cycled the connection once
+      ansible.builtin.assert:
+        that:
+          - (dig_failure_calls.content | b64decode).splitlines() == ['connection down scenario_vpn_client', 'connection up scenario_vpn_client']
+
+    - name: Reset calls and switch to ping failure
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: "{{ item.state }}"
+        mode: "{{ item.mode | default(omit) }}"
+      loop:
+        - path: "{{ nmcli_calls }}"
+          state: absent
+        - path: "{{ dig_fail_marker }}"
+          state: absent
+        - path: "{{ ping_fail_marker }}"
+          state: touch
+          mode: '0600'
+
+    - name: Run watchdog with failed ping check
+      ansible.builtin.command: "{{ watchdog_script }}"
+      changed_when: true
+
+    - name: Read ping-failure nmcli calls
+      ansible.builtin.slurp:
+        path: "{{ nmcli_calls }}"
+      register: ping_failure_calls
+
+    - name: Assert ping failure cycled the connection once
+      ansible.builtin.assert:
+        that:
+          - (ping_failure_calls.content | b64decode).splitlines() == ['connection down scenario_vpn_client', 'connection up scenario_vpn_client']
+
+    - name: Reset calls before lock check
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ nmcli_calls }}"
+        - "{{ ping_fail_marker }}"
+
+    - name: Hold watchdog lock
+      ansible.builtin.command:
+        argv:
+          - flock
+          - "{{ watchdog_lock }}"
+          - sleep
+          - '3'
+      async: 5
+      poll: 0
+      register: watchdog_lock_job
+      changed_when: false
+
+    - name: Wait for lock holder to start
+      ansible.builtin.pause:
+        seconds: 1
+
+    - name: Run watchdog while lock is held
+      ansible.builtin.command: "{{ watchdog_script }}"
+      changed_when: false
+
+    - name: Wait for lock holder to finish
+      ansible.builtin.async_status:
+        jid: "{{ watchdog_lock_job.ansible_job_id }}"
+      register: watchdog_lock_result
+      until: watchdog_lock_result.finished
+      retries: 5
+      delay: 1
+
+    - name: Confirm locked run did not call nmcli
+      ansible.builtin.stat:
+        path: "{{ nmcli_calls }}"
+      register: locked_nmcli_calls
+
+    - name: Assert locked run did nothing
+      ansible.builtin.assert:
+        that:
+          - not locked_nmcli_calls.stat.exists

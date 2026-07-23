@@ -69,6 +69,17 @@ packages, writes security-only unattended-upgrades origins, configures reboot
 and service restart behavior, logs apt-listchanges output, and remains
 idempotent.
 
+Run the OpenVPN client watchdog scenario:
+
+```bash
+tests/scenarios/openvpn_client/run.sh
+```
+
+This verifies the optional NetworkManager watchdog resources, permissions,
+cron schedule, idempotence, healthy no-op behavior, DNS and ping failure repair
+paths, per-connection locking, and safe disable cleanup. Command stubs keep the
+scenario local to the disposable container; it does not contact a VPN server.
+
 Run the Resticprofile backup scenario:
 
 ```bash

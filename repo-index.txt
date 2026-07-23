@@ -1,7 +1,5 @@
 .gitignore: Git ignore rules for editor cruft, Ansible temp files, retry files, and local artifact exports.
 AGENTS.md: Repository-specific instructions for agents, including role conventions and repository index maintenance workflow.
-BACKUP_IMPLEMENTATION_PLAN.md: Pointer to the consolidated implementation contract and operator rollout plan in the deployment repository.
-BORGMATIC_BACKUP_ROLE_PLAN.md: Requirements, boundaries, interface, test scenario, and migration plan for the narrow Borgmatic backup role.
 LICENSE: Project license text.
 README.md: Collection overview, role list, shared path conventions, linting, scenario tests, and repository index usage.
 galaxy.yml: Ansible Galaxy collection metadata, namespace, version, authorship, tags, dependencies, and repository links.
@@ -84,8 +82,12 @@ roles/openvpn_client/tasks/manage_client.yml: Shared per-client orchestration ta
 roles/openvpn_client/tasks/manage_client_gateway.yml: Tasks for configuring an OpenVPN client host as a gateway.
 roles/openvpn_client/tasks/manage_client_networkmanager.yml: Tasks for importing and managing OpenVPN client profiles in NetworkManager.
 roles/openvpn_client/tasks/manage_client_openvpn.yml: Tasks for installing and managing OpenVPN client service configuration files.
+roles/openvpn_client/tasks/manage_client_watchdog.yml: Installs or removes the per-connection NetworkManager watchdog script, cron schedule, log, and logrotate policy.
 roles/openvpn_client/templates/nm-openvpn-autoconnect.sh.j2: Script template that helps NetworkManager OpenVPN profiles reconnect automatically.
 roles/openvpn_client/templates/openvpn-client-override.conf.j2: systemd override template for OpenVPN client service behavior.
+roles/openvpn_client/templates/openvpn-client-watchdog-cron.j2: Cron template for periodic OpenVPN connection health checks and logged repair output.
+roles/openvpn_client/templates/openvpn-client-watchdog-logrotate.j2: Logrotate policy for a dedicated OpenVPN client watchdog log.
+roles/openvpn_client/templates/openvpn-client-watchdog.sh.j2: Checks endpoint DNS and VPN-internal reachability, then cycles an unhealthy NetworkManager connection.
 roles/openvpn_server/README.md: Role documentation for installing OpenVPN servers and exporting generated client bundles.
 roles/openvpn_server/defaults/main.yml: Default OpenVPN server instances, client definitions, addressing, DNS, certificate, and export settings.
 roles/openvpn_server/handlers/main.yml: Handlers for restarting OpenVPN server services after managed configuration changes.
@@ -164,6 +166,11 @@ tests/scenarios/borgmatic_backup/run.sh: Docker-backed runner for install, idemp
 tests/scenarios/borgmatic_backup/teardown.yml: Scenario playbook enabling explicit Borgmatic role teardown.
 tests/scenarios/borgmatic_backup/verify.yml: Scenario assertions plus explicit local repository creation, backup, check, listing, and canary restore.
 tests/scenarios/borgmatic_backup/verify_teardown.yml: Verifies role-owned files are removed while the local Borg repository remains intact.
+tests/scenarios/openvpn_client/converge.yml: Installs a configured OpenVPN client watchdog in the disposable scenario target.
+tests/scenarios/openvpn_client/run.sh: Docker-backed runner for watchdog rendering, behavior, locking, idempotence, and disable cleanup.
+tests/scenarios/openvpn_client/teardown.yml: Disables the scenario OpenVPN client watchdog.
+tests/scenarios/openvpn_client/verify.yml: Verifies watchdog files and exercises healthy, DNS-failure, ping-failure, and locked execution paths.
+tests/scenarios/openvpn_client/verify_teardown.yml: Verifies watchdog executables and schedules are removed while its historical log is retained.
 tests/scenarios/resticprofile_backup/converge.yml: Scenario with two local targets, per-target Gatus hooks, and a canary source.
 tests/scenarios/resticprofile_backup/run.sh: Docker-backed scenario runner for configuration, idempotence, restore, and teardown.
 tests/scenarios/resticprofile_backup/teardown.yml: Scenario playbook enabling explicit role teardown.

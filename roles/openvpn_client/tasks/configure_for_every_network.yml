@@ -26,6 +26,21 @@
     openvpn_client_managed: "{{ openvpn_client_entry.managed | default(true) }}"
     openvpn_client_dns_helper_script_override: "{{ openvpn_client_entry.dns_helper_script_override | default('') }}"
     openvpn_client_prefer_vpn_dns: "{{ openvpn_client_entry.prefer_vpn_dns | default(true) | bool }}"
+    openvpn_client_watchdog_enabled: >-
+      {{
+        openvpn_client_entry.watchdog_enabled
+        | default(false)
+        | bool
+      }}
+    openvpn_client_watchdog_interval: >-
+      {{
+        openvpn_client_entry.watchdog_interval
+        | default('*/5 * * * *')
+      }}
+    openvpn_client_watchdog_dig_target_override: >-
+      {{ openvpn_client_entry.watchdog_dig_target | default('') }}
+    openvpn_client_watchdog_ping_target_override: >-
+      {{ openvpn_client_entry.watchdog_ping_target | default('') }}
 
 - name: Capture DNS settings from server definition
   set_fact:
@@ -49,6 +64,46 @@
     openvpn_dns_domains: "{{ (openvpn_dns_domains | reject('equalto', '') | list) or ['.'] }}"
     openvpn_dns_domains_route: "{{ openvpn_dns_domains | map('regex_replace', '^~', '') | list }}"
     openvpn_dns_domains_search: "{{ openvpn_dns_domains | map('regex_replace', '^~?(.*)$', '~\\1') | list }}"
+
+- name: Derive OpenVPN watchdog targets
+  when: openvpn_client_entry | length > 0
+  set_fact:
+    openvpn_client_watchdog_dig_target: >-
+      {{
+        openvpn_client_watchdog_dig_target_override
+        | default(
+            ovpn_server.openvpn_remote_host
+            | default(ovpn_server.server_hostname | default(''), true),
+            true
+          )
+      }}
+    openvpn_client_watchdog_ping_target: >-
+      {{
+        openvpn_client_watchdog_ping_target_override
+        | default(openvpn_dns_servers | first | default(''), true)
+      }}
+
+- name: Validate enabled OpenVPN watchdog settings
+  when:
+    - openvpn_client_entry | length > 0
+    - openvpn_client_managed | bool
+    - openvpn_client_watchdog_enabled | bool
+  assert:
+    that:
+      - openvpn_client_watchdog_interval is string
+      - openvpn_client_watchdog_interval | trim | length > 0
+      - "'\\n' not in openvpn_client_watchdog_interval"
+      - openvpn_client_watchdog_interval.split() | length == 5
+      - openvpn_client_watchdog_dig_target is string
+      - openvpn_client_watchdog_dig_target | trim | length > 0
+      - openvpn_client_watchdog_dig_target is not search('\\s')
+      - openvpn_client_watchdog_ping_target is string
+      - openvpn_client_watchdog_ping_target | trim | length > 0
+      - openvpn_client_watchdog_ping_target is not search('\\s')
+    fail_msg: >-
+      Enabled OpenVPN watchdogs need a five-field watchdog_interval, a
+      watchdog_dig_target or openvpn_remote_host, and a watchdog_ping_target
+      or at least one openvpn_dns_servers value.
 
 - name: Skip server if client entry is missing or client unmanaged
   when: (openvpn_client_entry | length == 0) or not (openvpn_client_managed | default(true) | bool)
