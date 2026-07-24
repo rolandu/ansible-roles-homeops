@@ -75,9 +75,10 @@ Run the OpenVPN client watchdog scenario:
 tests/scenarios/openvpn_client/run.sh
 ```
 
-This verifies the optional NetworkManager watchdog resources, permissions,
-cron schedule, idempotence, healthy no-op behavior, DNS and ping failure repair
-paths, per-connection locking, and safe disable cleanup. Command stubs keep the
+This verifies the optional NetworkManager watchdog resources, root-only script
+permissions, cron schedule, idempotence, timestamped healthy and repair logs,
+suppression of raw command output, DNS and ping failure repair paths,
+per-connection locking, and safe disable cleanup. Command stubs keep the
 scenario local to the disposable container; it does not contact a VPN server.
 
 Run the Resticprofile backup scenario:

@@ -29,16 +29,17 @@ else
 fi
 
 if [[ "${dig_ok}" == "true" && "${ping_ok}" == "true" ]]; then
+  log "Watchdog check succeeded for ${VPN_CONNECTION}: dig=true ping=true"
   exit 0
 fi
 
 log "Watchdog check failed for ${VPN_CONNECTION}: dig=${dig_ok} ping=${ping_ok}; restarting"
 
-if ! nmcli connection down "${VPN_CONNECTION}"; then
+if ! nmcli connection down "${VPN_CONNECTION}" >/dev/null 2>&1; then
   log "Could not deactivate ${VPN_CONNECTION}; attempting activation anyway"
 fi
 
-if nmcli connection up "${VPN_CONNECTION}"; then
+if nmcli connection up "${VPN_CONNECTION}" >/dev/null 2>&1; then
   log "Restarted ${VPN_CONNECTION} successfully"
 else
   log "Failed to restart ${VPN_CONNECTION}"

@@ -51,7 +51,7 @@
     dest: "{{ openvpn_client_watchdog_script_path }}"
     owner: root
     group: root
-    mode: '0755'
+    mode: '0700'
   when: openvpn_client_watchdog_enabled | bool
 
 - name: Install OpenVPN watchdog cron

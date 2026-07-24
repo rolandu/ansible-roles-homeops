@@ -52,7 +52,7 @@ clients:
     watchdog_enabled: true
 ```
 
-Every five minutes by default, the watchdog resolves the effective OpenVPN endpoint with `dig` and pings the first configured VPN DNS server. Both checks must pass. Failure of either check runs `nmcli connection down` followed by `nmcli connection up` for the role-derived `<vpn_name>_<client>` connection.
+Every five minutes by default, the watchdog resolves the effective OpenVPN endpoint with `dig` and pings the first configured VPN DNS server. Both checks must pass. Failure of either check runs `nmcli connection down` followed by `nmcli connection up` for the role-derived `<vpn_name>_<client>` connection. Every completed run writes a timestamped success, failure, or repair result to the dedicated log.
 
 Override the derived targets or schedule only when needed:
 
@@ -73,7 +73,7 @@ For connection `<vpn_name>_<client>`, the role manages:
 - `/var/log/openvpn-client-<vpn_name>_<client>_watchdog.log`
 - `/etc/logrotate.d/openvpn-client-<vpn_name>_<client>_watchdog`
 
-The script uses a per-connection lock under `/run`, so scheduled and manual runs cannot overlap. Disabling the watchdog removes its script, cron file, and logrotate policy without changing the VPN connection.
+The script is managed as `root:root` with mode `0700`; only root can read or execute its network-repair logic. It uses a per-connection lock under `/run`, so scheduled and manual runs cannot overlap. All watchdog-owned output passes through the timestamped logger, while raw `dig`, `ping`, and `nmcli` output is suppressed; detailed connection diagnostics remain available in the NetworkManager journal. Disabling the watchdog removes its script, cron file, and logrotate policy without changing the VPN connection.
 
 To inspect and exercise a configured watchdog:
 
@@ -86,3 +86,5 @@ ping -c 1 <effective-ping-target>
 sudo nmcli connection down "<vpn_name>_<client>"
 sudo nmcli connection up "<vpn_name>_<client>"
 ```
+
+A healthy manual run prints one timestamped success line. Cron appends the same line to the dedicated log, providing positive evidence of each completed scheduled check.

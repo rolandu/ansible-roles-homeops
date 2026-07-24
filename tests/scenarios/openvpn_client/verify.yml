@@ -14,6 +14,7 @@
     nmcli_calls: /tmp/scenario-nmcli-calls
     dig_fail_marker: /tmp/scenario-dig-fail
     ping_fail_marker: /tmp/scenario-ping-fail
+    watchdog_timestamp_pattern: '^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[^]]+\] '
 
   tasks:
     - name: Inspect managed watchdog files
@@ -30,7 +31,7 @@
       ansible.builtin.assert:
         that:
           - watchdog_files.results[0].stat.exists
-          - watchdog_files.results[0].stat.mode == '0755'
+          - watchdog_files.results[0].stat.mode == '0700'
           - watchdog_files.results[1].stat.exists
           - watchdog_files.results[1].stat.mode == '0644'
           - watchdog_files.results[2].stat.exists
@@ -79,6 +80,8 @@
           content: |
             #!/usr/bin/env bash
             printf '%s\n' "$*" >> /tmp/scenario-nmcli-calls
+            printf 'raw nmcli standard output\n'
+            printf 'raw nmcli error output\n' >&2
 
     - name: Reset scenario failure state
       ansible.builtin.file:
@@ -91,6 +94,7 @@
 
     - name: Run healthy watchdog check
       ansible.builtin.command: "{{ watchdog_script }}"
+      register: healthy_watchdog
       changed_when: false
 
     - name: Check that healthy run did not call nmcli
@@ -102,6 +106,9 @@
       ansible.builtin.assert:
         that:
           - not healthy_nmcli_calls.stat.exists
+          - healthy_watchdog.stdout_lines | length == 1
+          - healthy_watchdog.stdout_lines[0] is match(watchdog_timestamp_pattern)
+          - healthy_watchdog.stdout_lines[0] is search('Watchdog check succeeded for scenario_vpn_client: dig=true ping=true')
 
     - name: Make DNS check fail
       ansible.builtin.file:
@@ -111,6 +118,7 @@
 
     - name: Run watchdog with failed DNS check
       ansible.builtin.command: "{{ watchdog_script }}"
+      register: dig_failure_watchdog
       changed_when: true
 
     - name: Read DNS-failure nmcli calls
@@ -122,6 +130,12 @@
       ansible.builtin.assert:
         that:
           - (dig_failure_calls.content | b64decode).splitlines() == ['connection down scenario_vpn_client', 'connection up scenario_vpn_client']
+          - dig_failure_watchdog.stdout_lines | length == 2
+          - dig_failure_watchdog.stdout_lines[0] is match(watchdog_timestamp_pattern)
+          - dig_failure_watchdog.stdout_lines[1] is match(watchdog_timestamp_pattern)
+          - dig_failure_watchdog.stdout_lines[0] is search('Watchdog check failed for scenario_vpn_client: dig=false ping=true; restarting')
+          - dig_failure_watchdog.stdout_lines[1] is search('Restarted scenario_vpn_client successfully')
+          - dig_failure_watchdog.stdout is not search('raw nmcli')
 
     - name: Reset calls and switch to ping failure
       ansible.builtin.file:
@@ -139,6 +153,7 @@
 
     - name: Run watchdog with failed ping check
       ansible.builtin.command: "{{ watchdog_script }}"
+      register: ping_failure_watchdog
       changed_when: true
 
     - name: Read ping-failure nmcli calls
@@ -150,6 +165,12 @@
       ansible.builtin.assert:
         that:
           - (ping_failure_calls.content | b64decode).splitlines() == ['connection down scenario_vpn_client', 'connection up scenario_vpn_client']
+          - ping_failure_watchdog.stdout_lines | length == 2
+          - ping_failure_watchdog.stdout_lines[0] is match(watchdog_timestamp_pattern)
+          - ping_failure_watchdog.stdout_lines[1] is match(watchdog_timestamp_pattern)
+          - ping_failure_watchdog.stdout_lines[0] is search('Watchdog check failed for scenario_vpn_client: dig=true ping=false; restarting')
+          - ping_failure_watchdog.stdout_lines[1] is search('Restarted scenario_vpn_client successfully')
+          - ping_failure_watchdog.stdout is not search('raw nmcli')
 
     - name: Reset calls before lock check
       ansible.builtin.file:
@@ -177,6 +198,7 @@
 
     - name: Run watchdog while lock is held
       ansible.builtin.command: "{{ watchdog_script }}"
+      register: locked_watchdog
       changed_when: false
 
     - name: Wait for lock holder to finish
@@ -196,3 +218,4 @@
       ansible.builtin.assert:
         that:
           - not locked_nmcli_calls.stat.exists
+          - locked_watchdog.stdout_lines | length == 0
