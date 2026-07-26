@@ -25,6 +25,9 @@ private key and never modifies a remote server.
 - The private and public key modes are `'0600'` and `'0644'`.
 - Root's SSH config is rendered from `ssh_root_client_hosts` and supports
   multiple SSH servers.
+- When `ssh_root_client_hosts` is empty, the role performs identity
+  generation/recovery and public-key export only. It does not render, replace,
+  or remove the managed SSH config or known-hosts file.
 - Every server entry includes an SSH alias, real hostname or address, remote
   username, optional custom port, and one or more verified host keys.
 - Every managed server uses the generated identity with `IdentitiesOnly`,
