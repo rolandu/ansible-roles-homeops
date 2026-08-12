@@ -1,0 +1,83 @@
+---
+- name: Derive OpenVPN watchdog paths
+  ansible.builtin.set_fact:
+    openvpn_client_watchdog_name: "{{ openvpn_client_connection_name }}_watchdog"
+    openvpn_client_watchdog_script_path: >-
+      /usr/local/sbin/{{ openvpn_client_connection_name }}_watchdog.sh
+    openvpn_client_watchdog_cron_path: >-
+      /etc/cron.d/openvpn-client-{{ openvpn_client_connection_name }}_watchdog
+    openvpn_client_watchdog_log_path: >-
+      /var/log/openvpn-client-{{ openvpn_client_connection_name }}_watchdog.log
+    openvpn_client_watchdog_logrotate_path: >-
+      /etc/logrotate.d/openvpn-client-{{ openvpn_client_connection_name }}_watchdog
+    openvpn_client_watchdog_lock_path: >-
+      /run/{{ openvpn_client_connection_name }}_watchdog.lock
+
+- name: Validate OpenVPN watchdog connection name
+  ansible.builtin.assert:
+    that:
+      - openvpn_client_connection_name is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      The OpenVPN watchdog requires a connection name containing only letters,
+      numbers, dots, underscores, or hyphens.
+
+- name: Install OpenVPN watchdog packages
+  ansible.builtin.apt:
+    name:
+      - cron
+      - dnsutils
+      - iputils-ping
+      - logrotate
+      - util-linux
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: openvpn_client_watchdog_enabled | bool
+
+- name: Ensure OpenVPN watchdog log exists
+  ansible.builtin.file:
+    path: "{{ openvpn_client_watchdog_log_path }}"
+    state: touch
+    owner: root
+    group: root
+    mode: '0640'
+    modification_time: preserve
+    access_time: preserve
+  when: openvpn_client_watchdog_enabled | bool
+
+- name: Install OpenVPN watchdog script
+  ansible.builtin.template:
+    src: openvpn-client-watchdog.sh.j2
+    dest: "{{ openvpn_client_watchdog_script_path }}"
+    owner: root
+    group: root
+    mode: '0700'
+  when: openvpn_client_watchdog_enabled | bool
+
+- name: Install OpenVPN watchdog cron
+  ansible.builtin.template:
+    src: openvpn-client-watchdog-cron.j2
+    dest: "{{ openvpn_client_watchdog_cron_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: openvpn_client_watchdog_enabled | bool
+
+- name: Install OpenVPN watchdog logrotate policy
+  ansible.builtin.template:
+    src: openvpn-client-watchdog-logrotate.j2
+    dest: "{{ openvpn_client_watchdog_logrotate_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: openvpn_client_watchdog_enabled | bool
+
+- name: Remove disabled OpenVPN watchdog files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ openvpn_client_watchdog_script_path }}"
+    - "{{ openvpn_client_watchdog_cron_path }}"
+    - "{{ openvpn_client_watchdog_logrotate_path }}"
+  when: not (openvpn_client_watchdog_enabled | bool)

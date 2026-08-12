@@ -1,0 +1,27 @@
+# Managed by Ansible. Local changes will be overwritten.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+{% if resticprofile_schedule_enabled %}
+{% set backup_schedule = [
+  resticprofile_backup_cron.minute,
+  resticprofile_backup_cron.hour,
+  resticprofile_backup_cron.day,
+  resticprofile_backup_cron.month,
+  resticprofile_backup_cron.weekday
+] | join(' ') %}
+{% set backup_job = resticprofile_script_path ~ ' backup >> '
+  ~ resticprofile_log_file ~ ' 2>&1' %}
+{{ backup_schedule }} root {{ backup_job }}
+{% endif %}
+{% if resticprofile_check_schedule_enabled %}
+{% set check_schedule = [
+  resticprofile_check_cron.minute,
+  resticprofile_check_cron.hour,
+  resticprofile_check_cron.day,
+  resticprofile_check_cron.month,
+  resticprofile_check_cron.weekday
+] | join(' ') %}
+{% set check_job = resticprofile_script_path ~ ' check >> '
+  ~ resticprofile_log_file ~ ' 2>&1' %}
+{{ check_schedule }} root {{ check_job }}
+{% endif %}

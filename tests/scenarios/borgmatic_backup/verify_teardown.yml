@@ -1,0 +1,30 @@
+---
+- name: Verify borgmatic_backup teardown
+  hosts: role_backup
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Inspect removed Borgmatic paths
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/borgmatic
+        - /usr/local/bin/borg
+        - /usr/local/bin/borgmatic
+        - /etc/borgmatic
+        - /etc/cron.d/borgmatic-backup
+        - /etc/logrotate.d/borgmatic-backup
+        - /var/log/borgmatic-backup.log
+      register: borgmatic_removed_paths
+
+    - name: Inspect preserved Borg repository
+      ansible.builtin.stat:
+        path: /var/lib/borgmatic-test-repository
+      register: borgmatic_preserved_repository
+
+    - name: Assert Borgmatic teardown state
+      ansible.builtin.assert:
+        that:
+          - borgmatic_removed_paths.results | map(attribute='stat.exists') | select('equalto', true) | list | length == 0
+          - borgmatic_preserved_repository.stat.isdir

@@ -1,0 +1,116 @@
+---
+- name: Verify automatic_updates_debian_ubuntu
+  hosts: automatic_updates_debian_ubuntu_targets
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Read APT periodic config
+      ansible.builtin.slurp:
+        src: /etc/apt/apt.conf.d/20auto-upgrades
+      register: apt_periodic_config
+
+    - name: Read unattended-upgrades config
+      ansible.builtin.slurp:
+        src: /etc/apt/apt.conf.d/50unattended-upgrades
+      register: unattended_upgrades_config
+
+    - name: Read apt-listchanges config
+      ansible.builtin.slurp:
+        src: /etc/apt/listchanges.conf.d/90-homeops-automatic-updates.conf
+      register: apt_listchanges_config
+
+    - name: Read needrestart config
+      ansible.builtin.slurp:
+        src: /etc/needrestart/conf.d/90-homeops-automatic-updates.conf
+      register: needrestart_config
+
+    - name: Read apt-listchanges logrotate config
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/automatic-updates-debian-ubuntu-apt-listchanges
+      register: apt_listchanges_logrotate_config
+
+    - name: Check managed files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/apt/apt.conf.d/20auto-upgrades
+        - /etc/apt/apt.conf.d/50unattended-upgrades
+        - /etc/apt/listchanges.conf.d/90-homeops-automatic-updates.conf
+        - /etc/needrestart/conf.d/90-homeops-automatic-updates.conf
+        - /etc/logrotate.d/automatic-updates-debian-ubuntu-apt-listchanges
+        - /var/log/apt/listchanges.log
+      register: managed_files
+
+    - name: Validate APT config parses
+      ansible.builtin.command:
+        argv:
+          - apt-config
+          - dump
+      register: apt_config_dump
+      changed_when: false
+
+    - name: Dry-run unattended-upgrades
+      ansible.builtin.command:
+        argv:
+          - unattended-upgrade
+          - -v
+          - --dry-run
+      register: unattended_upgrade_dry_run
+      changed_when: false
+
+    - name: Assert automatic update state
+      ansible.builtin.assert:
+        that:
+          - "'unattended-upgrades' in ansible_facts.packages"
+          - "'apt-listchanges' in ansible_facts.packages"
+          - "'needrestart' in ansible_facts.packages"
+          - "'logrotate' in ansible_facts.packages"
+          - apt_config_dump.rc == 0
+          - unattended_upgrade_dry_run.rc == 0
+          - dry_run_output is search('Allowed origins are:')
+          - dry_run_output is search('origin=Ubuntu,archive=jammy-security')
+          - dry_run_output is search('origin=UbuntuESMApps,archive=jammy-apps-security')
+          - dry_run_output is search('origin=UbuntuESM,archive=jammy-infra-security')
+          - dry_run_output is not search('origin=Ubuntu,archive=jammy,')
+          - dry_run_output is not search('origin=Ubuntu,archive=jammy-updates')
+          - managed_file_stats['/etc/apt/apt.conf.d/20auto-upgrades'].mode == '0644'
+          - managed_file_stats['/etc/apt/apt.conf.d/50unattended-upgrades'].mode == '0644'
+          - managed_file_stats['/etc/apt/listchanges.conf.d/90-homeops-automatic-updates.conf'].mode == '0644'
+          - managed_file_stats['/etc/needrestart/conf.d/90-homeops-automatic-updates.conf'].mode == '0644'
+          - managed_file_stats['/etc/logrotate.d/automatic-updates-debian-ubuntu-apt-listchanges'].mode == '0644'
+          - managed_file_stats['/var/log/apt/listchanges.log'].mode == '0640'
+          - apt_periodic_text is search('APT::Periodic::Update-Package-Lists "1";')
+          - apt_periodic_text is search('APT::Periodic::Unattended-Upgrade "1";')
+          - unattended_text is search('origin=Ubuntu,archive=\\$\\{distro_codename\\}-security')
+          - unattended_text is search('origin=UbuntuESMApps,archive=\\$\\{distro_codename\\}-apps-security')
+          - unattended_text is search('origin=UbuntuESM,archive=\\$\\{distro_codename\\}-infra-security')
+          - unattended_text is not search('archive=\\$\\{distro_codename\\}"')
+          - unattended_text is not search('archive=\\$\\{distro_codename\\}-updates')
+          - unattended_text is not search('backports')
+          - unattended_text is not search('proposed')
+          - unattended_text is search('Unattended-Upgrade::Automatic-Reboot "true";')
+          - unattended_text is search('Unattended-Upgrade::Automatic-Reboot-WithUsers "true";')
+          - unattended_text is search('Unattended-Upgrade::Automatic-Reboot-Time "now";')
+          - unattended_text is search('Unattended-Upgrade::Mail "";')
+          - apt_listchanges_text is search('frontend=log')
+          - apt_listchanges_text is search('which=both')
+          - apt_listchanges_text is search('log=/var/log/apt/listchanges.log')
+          - apt_listchanges_text is search('no_network=true')
+          - apt_listchanges_text is search('email_address=')
+          - needrestart_text is search("\\$nrconf\\{restart\\} = 'a';")
+          - apt_listchanges_logrotate_text is search('/var/log/apt/listchanges.log')
+          - apt_listchanges_logrotate_text is search('create 0640 root adm')
+      vars:
+        managed_file_stats: "{{ managed_files.results | items2dict(key_name='item', value_name='stat') }}"
+        apt_periodic_text: "{{ apt_periodic_config.content | b64decode }}"
+        unattended_text: "{{ unattended_upgrades_config.content | b64decode }}"
+        apt_listchanges_text: "{{ apt_listchanges_config.content | b64decode }}"
+        needrestart_text: "{{ needrestart_config.content | b64decode }}"
+        apt_listchanges_logrotate_text: "{{ apt_listchanges_logrotate_config.content | b64decode }}"
+        dry_run_output: >-
+          {{ unattended_upgrade_dry_run.stdout ~ '\n' ~ unattended_upgrade_dry_run.stderr }}

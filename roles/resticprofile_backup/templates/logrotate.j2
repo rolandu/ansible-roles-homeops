@@ -1,0 +1,9 @@
+{{ resticprofile_log_file }} {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create {{ resticprofile_log_mode }} root root
+}

@@ -1,0 +1,457 @@
+#!/usr/bin/env bash
+
+set -u
+set -o pipefail
+
+NOTIFY_METHOD={{ host_health_heartbeat_notify_method | quote }}
+NOTIFY_SUCCESS_URL_TEMPLATE={{ host_health_heartbeat_notify_success_url | quote }}
+NOTIFY_FAILURE_URL_TEMPLATE={{ host_health_heartbeat_notify_failure_url | quote }}
+ERROR_MAX_CHARS={{ host_health_heartbeat_error_max_chars | int }}
+DISKSPACE_MIN_FREE_PCT={{ host_health_heartbeat_diskspace_min_free_pct | int }}
+DISKSPACE_MIN_FREE_INODES_PCT={{ host_health_heartbeat_diskspace_min_free_inodes_pct | int }}
+DRY_RUN="${DRY_RUN:-0}"
+
+success=true
+messages=()
+declare -A checked_diskspace_paths=()
+
+now_ms() {
+  date +%s%3N
+}
+
+log_info() {
+  printf 'INFO: %s\n' "$*"
+}
+
+log_error() {
+  printf 'ERROR: %s\n' "$*" >&2
+}
+
+add_error() {
+  success=false
+  messages+=("$1")
+}
+
+first_line() {
+  local input="$1"
+  printf '%s\n' "$input" | sed -n '1p'
+}
+
+summarize_output() {
+  local input="$1"
+  local flat
+  flat="$(printf '%s\n' "$input" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//')"
+  printf '%.240s' "$flat"
+}
+
+join_messages() {
+  local joined=""
+  local msg
+
+  for msg in "${messages[@]}"; do
+    if [[ -z "$joined" ]]; then
+      joined="$msg"
+    else
+      joined="${joined}; ${msg}"
+    fi
+  done
+
+  if (( {% raw %}${#joined}{% endraw %} > ERROR_MAX_CHARS )); then
+    joined="${joined:0:ERROR_MAX_CHARS}..."
+  fi
+
+  printf '%s' "$joined"
+}
+
+require_command() {
+  local command="$1"
+  local description="$2"
+
+  if ! command -v "$command" >/dev/null 2>&1; then
+    add_error "Missing command for ${description}: ${command}"
+    return 1
+  fi
+
+  return 0
+}
+
+uri_encode() {
+  local input="$1"
+  jq -rn --arg v "$input" '$v|@uri'
+}
+
+render_notify_url() {
+  local template="$1"
+  local duration="$2"
+  local error_message="$3"
+  local encoded_success encoded_duration encoded_error
+  local url="$template"
+
+  encoded_success="$(uri_encode "$success")" || return 1
+  encoded_duration="$(uri_encode "$duration")" || return 1
+  encoded_error="$(uri_encode "$error_message")" || return 1
+
+  url="${url//\{success\}/$encoded_success}"
+  url="${url//\{duration\}/$encoded_duration}"
+  url="${url//\{error\}/$encoded_error}"
+
+  printf '%s' "$url"
+}
+
+notify_http() {
+  local duration="$1"
+  local error_message="$2"
+  local template url
+  local -a curl_args
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_error "Missing command for notification URL encoding: jq"
+    return 1
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    log_error "Missing command for HTTP notification: curl"
+    return 1
+  fi
+
+  if [[ "$success" == "true" ]]; then
+    template="$NOTIFY_SUCCESS_URL_TEMPLATE"
+  else
+    template="$NOTIFY_FAILURE_URL_TEMPLATE"
+  fi
+
+  if ! url="$(render_notify_url "$template" "$duration" "$error_message")"; then
+    log_error "Failed to render notification URL"
+    return 1
+  fi
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log_info "Dry run: would send ${NOTIFY_METHOD} notification with success=${success}, duration=${duration}"
+    return 0
+  fi
+
+  curl_args=(--fail --silent --show-error --request "$NOTIFY_METHOD")
+{% set heartbeat_notify_headers = (
+  host_health_heartbeat_effective_notify_headers
+  | default(
+    [host_health_heartbeat_notify_headers]
+    if (host_health_heartbeat_notify_headers is string)
+    else host_health_heartbeat_notify_headers
+  )
+) %}
+{% for header in heartbeat_notify_headers %}
+  curl_args+=(--header {{ header | quote }})
+{% endfor %}
+  curl_args+=("$url")
+
+  curl "${curl_args[@]}" >/dev/null
+}
+
+is_ignored_filesystem_type() {
+  local fstype="$1"
+
+  case "$fstype" in
+    autofs | binfmt_misc | bpf | cgroup | cgroup2 | configfs | debugfs | devpts | devtmpfs | efivarfs | fusectl | hugetlbfs | mqueue | nsfs | proc | pstore | ramfs | rpc_pipefs | securityfs | squashfs | sysfs | tmpfs | tracefs)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+check_diskspace_path() {
+  local path="$1"
+  local require_mountpoint="$2"
+  local df_output use_pct free_pct
+  local inode_output inode_use_pct inode_free_pct
+
+  if [[ "$require_mountpoint" == "true" ]] && ! mountpoint -q "$path"; then
+    add_error "Missing mountpoint: ${path}"
+    return
+  fi
+
+  if [[ -n "${checked_diskspace_paths[$path]+x}" ]]; then
+    return
+  fi
+  checked_diskspace_paths["$path"]=1
+
+  if ! df_output="$(df -P "$path" 2>&1)"; then
+    add_error "Could not read disk usage for ${path}: $(first_line "$df_output")"
+    return
+  fi
+
+  use_pct="$(awk 'NR == 2 { gsub("%", "", $5); print $5 }' <<<"$df_output")"
+  if [[ ! "$use_pct" =~ ^[0-9]+$ ]]; then
+    add_error "Could not parse disk usage for ${path}"
+    return
+  fi
+
+  free_pct=$((100 - use_pct))
+  if (( free_pct < DISKSPACE_MIN_FREE_PCT )); then
+    add_error "Low disk space on ${path}: ${free_pct}% free, minimum ${DISKSPACE_MIN_FREE_PCT}%"
+  fi
+
+  if (( DISKSPACE_MIN_FREE_INODES_PCT >= 0 )); then
+    if ! inode_output="$(df -Pi "$path" 2>&1)"; then
+      add_error "Could not read inode usage for ${path}: $(first_line "$inode_output")"
+      return
+    fi
+
+    inode_use_pct="$(awk 'NR == 2 { gsub("%", "", $5); print $5 }' <<<"$inode_output")"
+    if [[ -z "$inode_use_pct" || "$inode_use_pct" == "-" ]]; then
+      return
+    fi
+
+    if [[ ! "$inode_use_pct" =~ ^[0-9]+$ ]]; then
+      add_error "Could not parse inode usage for ${path}"
+      return
+    fi
+
+    inode_free_pct=$((100 - inode_use_pct))
+    if (( inode_free_pct < DISKSPACE_MIN_FREE_INODES_PCT )); then
+      add_error "Low free inodes on ${path}: ${inode_free_pct}% free, minimum ${DISKSPACE_MIN_FREE_INODES_PCT}%"
+    fi
+  fi
+}
+
+check_all_diskspace() {
+  local df_output fstype mountpoint
+
+  if ! df_output="$(df -PT 2>&1)"; then
+    add_error "Could not list mounted filesystems: $(summarize_output "$df_output")"
+    return
+  fi
+
+  while IFS=$'\t' read -r fstype mountpoint; do
+    [[ -n "$fstype" && -n "$mountpoint" ]] || continue
+    if is_ignored_filesystem_type "$fstype"; then
+      continue
+    fi
+    check_diskspace_path "$mountpoint" false
+  done < <(awk 'NR > 1 { print $2 "\t" $7 }' <<<"$df_output")
+}
+
+check_failed_units() {
+  local output failed_count failed_names
+
+  if ! require_command systemctl "systemd failed-unit check"; then
+    return
+  fi
+
+  if ! output="$(systemctl --failed --no-legend --plain 2>&1)"; then
+    add_error "Could not query failed systemd units: $(summarize_output "$output")"
+    return
+  fi
+
+  output="$(printf '%s\n' "$output" | sed '/^[[:space:]]*$/d')"
+  if [[ -n "$output" ]]; then
+    failed_count="$(printf '%s\n' "$output" | wc -l | tr -d ' ')"
+    failed_names="$(printf '%s\n' "$output" | awk '{print $1}' | paste -sd ',' -)"
+    add_error "Systemd has ${failed_count} failed unit(s): ${failed_names}"
+  fi
+}
+
+check_load_average() {
+  local max_per_cpu="$1"
+  local cpu_count load_1m threshold
+
+  if [[ ! -r /proc/loadavg ]]; then
+    add_error "Cannot read /proc/loadavg for load check"
+    return
+  fi
+
+  cpu_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
+  if [[ ! "$cpu_count" =~ ^[0-9]+$ ]] || (( cpu_count < 1 )); then
+    cpu_count=1
+  fi
+
+  load_1m="$(awk '{print $1}' /proc/loadavg)"
+  threshold="$(awk -v cpu="$cpu_count" -v max="$max_per_cpu" 'BEGIN { printf "%.2f", cpu * max }')"
+
+  if awk -v current_load="$load_1m" -v threshold="$threshold" 'BEGIN { exit(current_load > threshold ? 0 : 1) }'; then
+    add_error "High 1m load average: ${load_1m}, threshold ${threshold}"
+  fi
+}
+
+check_memory() {
+  local min_available_pct="$1"
+  local available_pct
+
+  if [[ ! -r /proc/meminfo ]]; then
+    add_error "Cannot read /proc/meminfo for memory check"
+    return
+  fi
+
+  available_pct="$(
+    awk '
+      $1 == "MemTotal:" { total = $2 }
+      $1 == "MemAvailable:" { available = $2 }
+      END {
+        if (total > 0 && available >= 0) {
+          printf "%d", (available * 100) / total
+        }
+      }
+    ' /proc/meminfo
+  )"
+
+  if [[ ! "$available_pct" =~ ^[0-9]+$ ]]; then
+    add_error "Could not parse available memory"
+    return
+  fi
+
+  if (( available_pct < min_available_pct )); then
+    add_error "Low available memory: ${available_pct}% available, minimum ${min_available_pct}%"
+  fi
+}
+
+check_smart_device() {
+  local device="$1"
+  local device_type="$2"
+  local output
+  local smart_args=(-H)
+
+  if ! require_command smartctl "SMART check"; then
+    return
+  fi
+
+  if [[ -n "$device_type" ]]; then
+    smart_args+=(-d "$device_type")
+  fi
+  smart_args+=("$device")
+
+  if ! output="$(smartctl "${smart_args[@]}" 2>&1)"; then
+    add_error "SMART health failed for ${device}: $(summarize_output "$output")"
+  fi
+}
+
+check_zfs() {
+  local output
+  local zpool_args=(status -x)
+
+  if ! require_command zpool "ZFS check"; then
+    return
+  fi
+
+{% for pool in host_health_heartbeat_zfs_pools %}
+  zpool_args+=({{ pool | quote }})
+{% endfor %}
+
+  if ! output="$(zpool "${zpool_args[@]}" 2>&1)"; then
+    add_error "ZFS health failed: $(summarize_output "$output")"
+  elif grep -Eiq 'is unhealthy|are unhealthy|no pools available' <<<"$output"; then
+    add_error "ZFS health failed: $(summarize_output "$output")"
+  fi
+}
+
+check_btrfs_path() {
+  local path="$1"
+  local output
+
+  if ! require_command btrfs "Btrfs check"; then
+    return
+  fi
+
+  if ! output="$(btrfs device stats "$path" 2>&1)"; then
+    add_error "Btrfs device stats failed for ${path}: $(summarize_output "$output")"
+  elif awk '$NF ~ /^[0-9]+$/ && $NF != 0 { bad = 1 } END { exit(bad ? 0 : 1) }' <<<"$output"; then
+    add_error "Btrfs device errors on ${path}: $(summarize_output "$output")"
+  fi
+}
+
+check_docker_container() {
+  local container="$1"
+  local output status health
+  local docker_format='{% raw %}{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}{% endraw %}'
+
+  if ! output="$(docker inspect --format "$docker_format" "$container" 2>&1)"; then
+    add_error "Docker container missing or inspect failed (${container}): $(summarize_output "$output")"
+    return
+  fi
+
+  status="${output%%|*}"
+  health="${output#*|}"
+
+  if [[ "$status" != "running" ]]; then
+    add_error "Docker container is not running (${container}): ${status}"
+    return
+  fi
+
+  if [[ "$health" != "none" && "$health" != "healthy" ]]; then
+    add_error "Docker container health is not healthy (${container}): ${health}"
+  fi
+}
+
+run_custom_check() {
+  local name="$1"
+  local command="$2"
+  local output
+
+  if ! output="$(bash -o pipefail -c "$command" 2>&1)"; then
+    add_error "Custom check failed (${name}): $(summarize_output "$output")"
+  fi
+}
+
+START_MS="$(now_ms)"
+
+{% if host_health_heartbeat_check_diskspace %}
+{% if host_health_heartbeat_diskspace_check_all %}
+check_all_diskspace
+{% endif %}
+{% for path in host_health_heartbeat_diskspace_filesystems %}
+check_diskspace_path {{ path | quote }} true
+{% endfor %}
+{% endif %}
+
+{% if host_health_heartbeat_systemd_failed_units %}
+check_failed_units
+{% endif %}
+
+{% if host_health_heartbeat_load_check %}
+check_load_average {{ host_health_heartbeat_load_1m_max_per_cpu | float | quote }}
+{% endif %}
+
+{% if host_health_heartbeat_memory_check %}
+check_memory {{ host_health_heartbeat_memory_min_available_pct | int }}
+{% endif %}
+
+{% for item in host_health_heartbeat_smart_devices %}
+check_smart_device {{ item.device | quote }} {{ item.type | default('') | quote }}
+{% endfor %}
+
+{% if host_health_heartbeat_zfs_check %}
+check_zfs
+{% endif %}
+
+{% for path in host_health_heartbeat_btrfs_paths %}
+check_btrfs_path {{ path | quote }}
+{% endfor %}
+
+{% if host_health_heartbeat_docker_containers | length > 0 %}
+if require_command docker "Docker container check"; then
+{% for container in host_health_heartbeat_docker_containers %}
+  check_docker_container {{ container | quote }}
+{% endfor %}
+fi
+{% endif %}
+
+{% for item in host_health_heartbeat_custom_commands %}
+run_custom_check {{ item.name | quote }} {{ item.command | quote }}
+{% endfor %}
+
+END_MS="$(now_ms)"
+DURATION="$((END_MS - START_MS))ms"
+ERROR_MESSAGE="$(join_messages)"
+
+if ! notify_http "$DURATION" "$ERROR_MESSAGE"; then
+  log_error "Failed to send host health heartbeat notification"
+  exit 2
+fi
+
+if [[ "$success" == "true" ]]; then
+  log_info "Host health heartbeat succeeded"
+  exit 0
+fi
+
+log_error "$ERROR_MESSAGE"
+exit 1

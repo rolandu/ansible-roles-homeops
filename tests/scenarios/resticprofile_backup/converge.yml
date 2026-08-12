@@ -1,0 +1,55 @@
+---
+- name: Converge resticprofile_backup
+  hosts: resticprofile_backup_targets
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Create scenario source directory
+      ansible.builtin.file:
+        path: /srv/resticprofile-test
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create scenario canary file
+      ansible.builtin.copy:
+        content: "resticprofile scenario canary\n"
+        dest: /srv/resticprofile-test/canary.txt
+        owner: root
+        group: root
+        mode: '0644'
+
+  roles:
+    - role: resticprofile_backup
+      vars:
+        resticprofile_targets:
+          - name: primary
+            repository: /var/lib/resticprofile-test-primary
+            password: scenario-primary-password-not-for-production
+            environment:
+              RESTIC_CACHE_DIR: /var/cache/resticprofile-primary
+          - name: secondary
+            repository: /var/lib/resticprofile-test-secondary
+            password: scenario-secondary-password-not-for-production
+            gatus_endpoint_key: scenario_secondary
+            gatus_token: scenario-secondary-gatus-token
+        resticprofile_sources:
+          - /srv/resticprofile-test
+        resticprofile_excludes:
+          - /srv/resticprofile-test/excluded
+        # Port 9 is intentionally closed. Resticprofile HTTP hook delivery
+        # failures are non-fatal, so the scenario verifies that a backup still
+        # succeeds when monitoring is unreachable.
+        resticprofile_gatus_enabled: true
+        resticprofile_gatus_url: http://127.0.0.1:9
+        resticprofile_gatus_endpoint_key: scenario_primary
+        resticprofile_gatus_token: scenario-primary-gatus-token
+        resticprofile_schedule_enabled: true
+        resticprofile_backup_cron:
+          minute: "15"
+          hour: "12"
+          day: "*"
+          month: "*"
+          weekday: "*"

@@ -1,0 +1,278 @@
+---
+- name: Validate host health heartbeat path and runtime settings
+  ansible.builtin.assert:
+    that:
+      - host_health_heartbeat_script_dir | length > 0
+      - host_health_heartbeat_script_dir is match('^/')
+      - host_health_heartbeat_script_path | length > 0
+      - host_health_heartbeat_script_path is match('^/')
+      - host_health_heartbeat_log_file | length > 0
+      - host_health_heartbeat_log_file is match('^/')
+      - host_health_heartbeat_log_mode is match('^0?[0-7]{3,4}$')
+      - host_health_heartbeat_install_dependencies | type_debug == "bool"
+      - host_health_heartbeat_install_cron | type_debug == "bool"
+      - host_health_heartbeat_cron_schedule | length > 0
+      - host_health_heartbeat_validate_run | type_debug == "bool"
+      - >-
+        host_health_heartbeat_notify_headers is string
+        or host_health_heartbeat_notify_headers | type_debug == "list"
+      - host_health_heartbeat_error_max_chars | int > 0
+      - host_health_heartbeat_check_diskspace | type_debug == "bool"
+      - host_health_heartbeat_diskspace_check_all | type_debug == "bool"
+      - host_health_heartbeat_diskspace_filesystems | type_debug == "list"
+      - host_health_heartbeat_diskspace_min_free_pct | int >= 0
+      - host_health_heartbeat_diskspace_min_free_pct | int <= 100
+      - host_health_heartbeat_diskspace_min_free_inodes_pct | int >= -1
+      - host_health_heartbeat_diskspace_min_free_inodes_pct | int <= 100
+      - host_health_heartbeat_systemd_failed_units | type_debug == "bool"
+      - host_health_heartbeat_load_check | type_debug == "bool"
+      - host_health_heartbeat_load_1m_max_per_cpu | float > 0
+      - host_health_heartbeat_memory_check | type_debug == "bool"
+      - host_health_heartbeat_memory_min_available_pct | int >= 0
+      - host_health_heartbeat_memory_min_available_pct | int <= 100
+      - host_health_heartbeat_smart_devices | type_debug == "list"
+      - host_health_heartbeat_zfs_check | type_debug == "bool"
+      - host_health_heartbeat_zfs_pools | type_debug == "list"
+      - host_health_heartbeat_btrfs_paths | type_debug == "list"
+      - host_health_heartbeat_docker_containers | type_debug == "list"
+      - host_health_heartbeat_custom_commands | type_debug == "list"
+    fail_msg: >-
+      host_health_heartbeat needs valid absolute script/log paths, booleans,
+      notification settings, check lists, and thresholds.
+
+- name: Validate host health heartbeat notification URL settings
+  ansible.builtin.assert:
+    that:
+      - host_health_heartbeat_notify_method is match('^[A-Z]+$')
+      - host_health_heartbeat_notify_success_url | length > 0
+      - host_health_heartbeat_notify_success_url is match('^https?://')
+      - host_health_heartbeat_notify_failure_url | length > 0
+      - host_health_heartbeat_notify_failure_url is match('^https?://')
+    fail_msg: >-
+      host_health_heartbeat needs an uppercase HTTP method and absolute
+      http(s) success/failure notification URL templates.
+
+- name: Build effective host health heartbeat notification headers
+  ansible.builtin.set_fact:
+    host_health_heartbeat_effective_notify_headers: >-
+      {{
+        [host_health_heartbeat_notify_headers]
+        if (host_health_heartbeat_notify_headers is string)
+        else host_health_heartbeat_notify_headers
+      }}
+  no_log: true
+
+- name: Validate default Gatus notification settings
+  ansible.builtin.assert:
+    that:
+      - host_health_heartbeat_gatus_url | length > 0
+      - host_health_heartbeat_gatus_url is match('^https?://')
+      - host_health_heartbeat_gatus_endpoint_key | length > 0
+      - host_health_heartbeat_gatus_endpoint_key is not search('\\s')
+      - host_health_heartbeat_gatus_token | length > 0
+    fail_msg: >-
+      host_health_heartbeat default notification URLs need gatus_url,
+      gatus_endpoint_key, and gatus_token. Override notify_success_url,
+      notify_failure_url, and notify_headers to use a non-Gatus endpoint.
+  when: >-
+    host_health_heartbeat_notify_success_url == host_health_heartbeat_gatus_notify_success_url
+    or host_health_heartbeat_notify_failure_url == host_health_heartbeat_gatus_notify_failure_url
+    or host_health_heartbeat_notify_headers == host_health_heartbeat_gatus_notify_headers
+  no_log: true
+
+- name: Validate host health heartbeat notification headers
+  ansible.builtin.assert:
+    that:
+      - item | string | length > 0
+      - item is not search('[\r\n]')
+    fail_msg: >-
+      Each host_health_heartbeat_notify_headers item must be a single non-empty
+      HTTP header.
+  loop: "{{ host_health_heartbeat_effective_notify_headers }}"
+  no_log: true
+
+- name: Validate host health heartbeat diskspace filesystems
+  ansible.builtin.assert:
+    that:
+      - item | string | length > 0
+      - item is match('^/')
+    fail_msg: >-
+      Each host_health_heartbeat_diskspace_filesystems item must be an absolute
+      path.
+  loop: "{{ host_health_heartbeat_diskspace_filesystems }}"
+
+- name: Validate host health heartbeat SMART checks
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.device is defined
+      - item.device | string | length > 0
+      - item.device is match('^/')
+      - item.type | default('') is not search('\\s')
+    fail_msg: >-
+      Each host_health_heartbeat_smart_devices item needs an absolute device
+      path and optional whitespace-free type.
+  loop: "{{ host_health_heartbeat_smart_devices }}"
+  loop_control:
+    label: "{{ item.device if (item.device is defined) else '<missing-device>' }}"
+
+- name: Validate host health heartbeat ZFS pools
+  ansible.builtin.assert:
+    that:
+      - item | string | length > 0
+      - item is match('^[A-Za-z0-9_.:-]+$')
+    fail_msg: >-
+      Each host_health_heartbeat_zfs_pools item must be a safe pool name.
+  loop: "{{ host_health_heartbeat_zfs_pools }}"
+
+- name: Validate host health heartbeat Btrfs paths
+  ansible.builtin.assert:
+    that:
+      - item | string | length > 0
+      - item is match('^/')
+    fail_msg: >-
+      Each host_health_heartbeat_btrfs_paths item must be an absolute path.
+  loop: "{{ host_health_heartbeat_btrfs_paths }}"
+
+- name: Validate host health heartbeat Docker containers
+  ansible.builtin.assert:
+    that:
+      - item | string | length > 0
+      - item is not search('\\s')
+    fail_msg: >-
+      Each host_health_heartbeat_docker_containers item must be a non-empty
+      container name or ID without whitespace.
+  loop: "{{ host_health_heartbeat_docker_containers }}"
+
+- name: Validate host health heartbeat custom commands
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name is defined
+      - item.name | string | length > 0
+      - item.command is defined
+      - item.command | string | length > 0
+    fail_msg: >-
+      Each host_health_heartbeat_custom_commands item needs name and command.
+  loop: "{{ host_health_heartbeat_custom_commands }}"
+  loop_control:
+    label: "{{ item.name if (item.name is defined) else '<missing-name>' }}"
+
+- name: Build host health heartbeat dependency package list
+  ansible.builtin.set_fact:
+    host_health_heartbeat_effective_packages: >-
+      {{
+        (
+          ['curl', 'jq']
+          + (
+            (host_health_heartbeat_smart_devices | length > 0)
+            | ternary(['smartmontools'], [])
+          )
+          + (
+            (host_health_heartbeat_btrfs_paths | length > 0)
+            | ternary(['btrfs-progs'], [])
+          )
+        ) | unique | list
+      }}
+
+- name: Install host health heartbeat dependencies
+  ansible.builtin.package:
+    name: "{{ host_health_heartbeat_effective_packages }}"
+    state: present
+  when:
+    - host_health_heartbeat_install_dependencies
+    - host_health_heartbeat_effective_packages | length > 0
+
+- name: Ensure host health heartbeat script directory exists
+  ansible.builtin.file:
+    path: "{{ host_health_heartbeat_script_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure host health heartbeat log directory exists
+  ansible.builtin.file:
+    path: "{{ host_health_heartbeat_log_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: host_health_heartbeat_install_cron
+
+- name: Ensure host health heartbeat log file exists
+  ansible.builtin.file:
+    path: "{{ host_health_heartbeat_log_file }}"
+    state: touch
+    owner: root
+    group: root
+    mode: "{{ host_health_heartbeat_log_mode }}"
+    modification_time: preserve
+    access_time: preserve
+  when: host_health_heartbeat_install_cron
+
+- name: Render host health heartbeat script
+  ansible.builtin.template:
+    src: host-health-heartbeat.sh.j2
+    dest: "{{ host_health_heartbeat_script_path }}"
+    owner: root
+    group: root
+    mode: '0700'
+  no_log: true
+
+- name: Run host health heartbeat validation
+  ansible.builtin.command:
+    cmd: "{{ host_health_heartbeat_script_path }}"
+  register: host_health_heartbeat_validate_run_cmd
+  changed_when: false
+  failed_when: false
+  when:
+    - host_health_heartbeat_validate_run
+    - not ansible_check_mode
+
+- name: Show host health heartbeat validation output
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        host_health_heartbeat_validate_run_cmd.stdout_lines
+        + host_health_heartbeat_validate_run_cmd.stderr_lines
+      }}
+  when:
+    - host_health_heartbeat_validate_run
+    - not ansible_check_mode
+
+- name: Fail when host health heartbeat validation failed
+  ansible.builtin.fail:
+    msg: >-
+      Host health heartbeat validation failed with exit code
+      {{ host_health_heartbeat_validate_run_cmd.rc }}.
+      See log output above.
+  when:
+    - host_health_heartbeat_validate_run
+    - not ansible_check_mode
+    - host_health_heartbeat_validate_run_cmd.rc != 0
+
+- name: Install cron for scheduled host health heartbeat
+  ansible.builtin.copy:
+    dest: /etc/cron.d/host-health-heartbeat
+    owner: root
+    group: root
+    mode: '0644'
+    # yamllint disable rule:line-length
+    content: |
+      # Send host health check results to the configured HTTP monitoring endpoint.
+      SHELL=/bin/bash
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      MAILTO=""
+      HOST_HEALTH_HEARTBEAT_SCRIPT={{ host_health_heartbeat_script_path }}
+      HOST_HEALTH_HEARTBEAT_LOG={{ host_health_heartbeat_log_file }}
+      # minute hour day month weekday user command
+      {{ host_health_heartbeat_cron_schedule }} root "$HOST_HEALTH_HEARTBEAT_SCRIPT" >>"$HOST_HEALTH_HEARTBEAT_LOG" 2>&1
+    # yamllint enable rule:line-length
+  when: host_health_heartbeat_install_cron
+
+- name: Remove disabled host health heartbeat cron
+  ansible.builtin.file:
+    path: /etc/cron.d/host-health-heartbeat
+    state: absent
+  when: not host_health_heartbeat_install_cron

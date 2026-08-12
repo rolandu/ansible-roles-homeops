@@ -58,6 +58,58 @@ creates a managed user, appends supplementary groups, writes authorized keys,
 leaves unrelated groups alone, removes explicitly absent groups, and remains
 idempotent.
 
+Run the automatic security updates scenario:
+
+```bash
+tests/scenarios/automatic_updates_debian_ubuntu/run.sh
+```
+
+This verifies that `automatic_updates_debian_ubuntu` installs the native update
+packages, writes security-only unattended-upgrades origins, configures reboot
+and service restart behavior, logs apt-listchanges output, and remains
+idempotent.
+
+Run the OpenVPN client watchdog scenario:
+
+```bash
+tests/scenarios/openvpn_client/run.sh
+```
+
+This verifies the optional NetworkManager watchdog resources, root-only script
+permissions, cron schedule, idempotence, timestamped healthy and repair logs,
+suppression of raw command output, DNS and ping failure repair paths,
+per-connection locking, and safe disable cleanup. Command stubs keep the
+scenario local to the disposable container; it does not contact a VPN server.
+
+Run the Resticprofile backup scenario:
+
+```bash
+tests/scenarios/resticprofile_backup/run.sh
+```
+
+This verifies the pinned Resticprofile installation, two secure target
+profiles and their sequential group, cron and logrotate files, idempotence, a
+local canary backup to both repositories, a targeted restore, and explicit
+teardown. It also renders per-target Gatus hooks and verifies that an
+unreachable Gatus endpoint does not replace the backup result. The scenario
+downloads packages and release artifacts only when an operator chooses to run
+it.
+
+Run the Borgmatic backup scenario:
+
+```bash
+tests/scenarios/borgmatic_backup/run.sh
+```
+
+This verifies the virtual-environment installation, secure native Borgmatic
+configuration rendering, stable command links, direct `flock`-protected cron
+execution, logging, and idempotence. It validates the generic collection
+command playbook, then explicitly initializes a temporary local repository,
+backs up and restores a canary, checks exclusions, and proves that role
+teardown leaves repository data intact. SSH is used only by the Ansible test
+harness; Borg transfers data between two paths inside the disposable
+container.
+
 ## Requirements
 
 The current user must be able to access Docker. If Docker was just installed or

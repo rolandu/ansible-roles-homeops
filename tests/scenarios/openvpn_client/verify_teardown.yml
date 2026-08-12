@@ -1,0 +1,32 @@
+---
+- name: Verify disabled OpenVPN client watchdog
+  hosts: openvpn_client_targets
+  become: true
+  gather_facts: false
+
+  vars:
+    watchdog_script: /usr/local/sbin/scenario_vpn_client_watchdog.sh
+    watchdog_cron: /etc/cron.d/openvpn-client-scenario_vpn_client_watchdog
+    watchdog_log: /var/log/openvpn-client-scenario_vpn_client_watchdog.log
+    watchdog_logrotate: /etc/logrotate.d/openvpn-client-scenario_vpn_client_watchdog
+
+  tasks:
+    - name: Inspect disabled watchdog paths
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ watchdog_script }}"
+        - "{{ watchdog_cron }}"
+        - "{{ watchdog_logrotate }}"
+      register: disabled_watchdog_files
+
+    - name: Inspect retained watchdog log
+      ansible.builtin.stat:
+        path: "{{ watchdog_log }}"
+      register: retained_watchdog_log
+
+    - name: Assert watchdog resources were disabled safely
+      ansible.builtin.assert:
+        that:
+          - disabled_watchdog_files.results | map(attribute='stat.exists') | select('equalto', true) | list | length == 0
+          - retained_watchdog_log.stat.exists

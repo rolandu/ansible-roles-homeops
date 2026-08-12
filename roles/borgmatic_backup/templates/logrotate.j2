@@ -1,0 +1,9 @@
+{{ borgmatic_backup_log_file }} {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create {{ borgmatic_backup_log_mode }} root root
+}

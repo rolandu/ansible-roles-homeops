@@ -1,0 +1,15 @@
+---
+- name: Disable OpenVPN client watchdog
+  hosts: openvpn_client_targets
+  become: true
+  gather_facts: false
+
+  vars:
+    openvpn_client_connection_name: scenario_vpn_client
+    openvpn_client_watchdog_enabled: false
+
+  tasks:
+    - name: Include OpenVPN client watchdog tasks
+      ansible.builtin.include_role:
+        name: openvpn_client
+        tasks_from: manage_client_watchdog

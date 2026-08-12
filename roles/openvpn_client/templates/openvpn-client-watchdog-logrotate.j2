@@ -1,0 +1,9 @@
+{{ openvpn_client_watchdog_log_path }} {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+}

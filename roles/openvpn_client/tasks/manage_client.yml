@@ -54,6 +54,16 @@
   set_fact:
     openvpn_client_nm_service_running: "{{ nm_running }}"
 
+- name: Ensure enabled watchdog uses NetworkManager
+  when: openvpn_client_watchdog_enabled | default(false) | bool
+  assert:
+    that:
+      - openvpn_client_nm_pkg_installed | bool
+      - openvpn_client_nm_service_running | bool
+    fail_msg: >-
+      The OpenVPN watchdog requires NetworkManager to be installed and running
+      because it repairs the connection with nmcli.
+
 # Only if both checks are true, manage via NetworkManager
 - name: Manage OpenVPN client via NetworkManager
   when: openvpn_client_nm_pkg_installed | bool and openvpn_client_nm_service_running | bool

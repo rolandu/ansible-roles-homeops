@@ -1,15 +1,28 @@
 # AGENTS.md
 
 This repository is a reusable Ansible role collection for home or small office
-infrastructure. Treat it as role-first, not as a standalone deployment project:
-there are no production inventories, caller playbooks, Molecule scenarios, or
-CI jobs in this repo.
+infrastructure. It is intended to be published on GitHub for community use.
+Treat it as role-first, not as a standalone deployment project: there are no
+production inventories, caller playbooks, Molecule scenarios, or CI jobs in
+this repo.
+
+This repository must not contain references to any private deployment
+infrastructure: no private hostnames, domains, inventory assumptions,
+provider account details, rollout state, or operator-specific secrets. It only
+knows about the reusable roles, helper scripts, docs, and tests contained in
+this repository.
+
+Small role-local fixes may be made directly. Major changes, such as new roles,
+new playbooks/workflows, or broad behavior changes, should be specified first
+in the corresponding private deployment repository's `specs/` directory. Do
+not add a `specs/` folder to this reusable role repository.
 
 ## Layout
 
 - Collection metadata and shared docs live at the repo root:
   - `README.md`
   - `galaxy.yml`
+  - `repo-index.txt`
 - Roles live under `roles/<role_name>/` and generally contain:
   - `defaults/main.yml`
   - `tasks/main.yml` plus small included task files
@@ -17,7 +30,17 @@ CI jobs in this repo.
   - `templates/*.j2` when needed
   - `meta/main.yml`
   - `README.md`
-- Tests and helper scripts live under `tests/`.
+- Helper scripts live under `scripts/`; tests and scenario fixtures live under
+  `tests/`.
+
+## Repository Index
+
+- Use `repo-index.txt` as a quick file lookup aid before broader filesystem
+  searches when locating existing code, docs, templates, or tests.
+- Refresh the index with `scripts/index-repo.sh` after creating, removing, or
+  renaming repository files. The script respects `.gitignore` through Git's
+  exclude handling and preserves existing descriptions after `: `.
+- Keep index descriptions short, single-line, and under 200 characters.
 
 Current roles: `adguardhome_docker`, `certbot_hetzner`, `openvpn_client`,
 `openvpn_server`, `ssh_user_keys_generate`, `ssh_user_keys_install`,
@@ -26,8 +49,13 @@ Current roles: `adguardhome_docker`, `certbot_hetzner`, `openvpn_client`,
 ## Core Rules
 
 - Keep changes role-local unless behavior is intentionally shared.
+- Make the smallest change necessary to achieve the current goal.
 - When role inputs or behavior change, update all relevant places in the same
   patch: `defaults/main.yml`, task validation/assertions, and the role README.
+- Prefer flexible role contracts over many convenience variables. When a tool
+  already has a native config format, prefer allowing the role user to provide
+  a mapping or rendered config file that Ansible templates and transfers, with
+  validation around the role-owned paths and safety-critical settings.
 - Prefer small task files with `include_tasks` for distinct workflows. Existing
   examples: `ssh_users` and `openvpn_*`.
 - Preserve explicit `owner`, `group`, and `mode` on managed files/directories,
@@ -37,6 +65,8 @@ Current roles: `adguardhome_docker`, `certbot_hetzner`, `openvpn_client`,
 - Keep `meta/main.yml` aligned with the repo baseline:
   `min_ansible_version: 2.13`; no dependencies unless actually needed.
 - Keep YAML syntax clean and task includes wired correctly.
+- If a new complex reusable role is to be created, discuss whether it should be 
+  published as part of the ansible-roles-homeops collection.
 
 ## Shared Paths
 
@@ -135,20 +165,38 @@ There are no committed production inventories, caller playbooks, Molecule
 scenarios, or CI jobs. Do not claim Molecule, runtime integration, or CI
 coverage unless that tooling is actually added.
 
-If local caller playbooks or inventories exist outside this repo,
-`ansible-playbook --syntax-check` or a targeted dry run may be useful. If
-meaningful validation cannot be run, say so plainly.
+Do not run commands with remote effects from this development environment. Do
+not execute Ansible commands against real inventories or managed hosts. Real
+controller environments and credentials are outside this reusable role
+repository; the operator runs those deployment commands manually.
+
+If meaningful validation cannot be run without real controller credentials or
+remote access, say so plainly.
+
+## Local Agent Environment
+
+- Agents may run Ansible validation and tests in this reusable role repo,
+  including `ansible-lint`, role scenario scripts, syntax checks with temporary
+  local inventories, and local test playbooks when useful. These checks must
+  not contact real managed hosts or use private deployment inventories.
+- Prefer repo-local temp/cache paths for Ansible tooling, such as
+  `.ansible-tmp/cache` and `.ansible-tmp/local`.
+- If the command sandbox cannot create its `/tmp` mount marker, request
+  escalation and use simple non-login shell commands where possible.
 
 ## Agent Workflow
 
 When modifying this repo:
 
-1. Read the target role `README.md`, `defaults/main.yml`, and `tasks/main.yml`.
-2. Search for changed variable names, paths, and schemas across other roles.
-3. Make the smallest change that preserves existing conventions.
-4. Update docs in the same patch.
-5. Run relevant validation:
+1. Check `repo-index.txt` for existing files related to the task.
+2. Read the target role `README.md`, `defaults/main.yml`, and `tasks/main.yml`.
+3. Search for changed variable names, paths, and schemas across other roles.
+4. Make the smallest change that preserves existing conventions.
+5. Update docs in the same patch.
+6. If files were created, removed, or renamed, run `scripts/index-repo.sh` and
+   keep `repo-index.txt` in the same patch.
+7. Run relevant validation:
    - role lint via `tests/lint-roles.sh` when available
    - scenario tests for roles with `tests/scenarios/<role>/run.sh`
    - syntax checks if a usable caller playbook/inventory exists
-6. Summarize what changed and any validation that could not be run.
+8. Summarize what changed and any validation that could not be run.

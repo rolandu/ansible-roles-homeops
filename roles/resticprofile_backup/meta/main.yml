@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: rolandu
+  description: Install and configure Resticprofile backups with explicit cron scheduling.
+  license: MIT
+  min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []

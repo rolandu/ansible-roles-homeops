@@ -174,3 +174,6 @@
   command: nmcli connection up "{{ openvpn_client_connection_name }}"
   register: openvpn_client_nm_up
   changed_when: openvpn_client_nm_up.rc == 0
+
+- name: Manage NetworkManager OpenVPN watchdog
+  include_tasks: manage_client_watchdog.yml

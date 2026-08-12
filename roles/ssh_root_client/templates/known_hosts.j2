@@ -1,0 +1,8 @@
+# Managed by Ansible. Host keys must be verified before being declared.
+{% for server in ssh_root_client_hosts %}
+{% set port = server.port | default(22) | int %}
+{% set known_host_name = server.hostname if port == 22 else '[' ~ server.hostname ~ ']:' ~ (port | string) %}
+{% for host_key in server.host_keys %}
+{{ known_host_name }} {{ host_key }}
+{% endfor %}
+{% endfor %}

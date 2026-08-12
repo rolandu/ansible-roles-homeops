@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: rolandu
+  description: >-
+    Generate a root SSH client identity, manage trusted server configuration,
+    and export the public key to controller artifacts.
+  license: MIT
+  min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []

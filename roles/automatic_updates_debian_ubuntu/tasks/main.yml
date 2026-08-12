@@ -1,0 +1,168 @@
+---
+- name: Gather minimum facts for automatic updates
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+  when: >-
+    ansible_distribution is not defined or
+    ansible_os_family is not defined or
+    ansible_service_mgr is not defined
+
+- name: Validate automatic_updates_debian_ubuntu inputs
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+      - ansible_distribution in ["Debian", "Ubuntu"]
+      - automatic_updates_debian_ubuntu_enabled | type_debug == "bool"
+      - automatic_updates_debian_ubuntu_update_interval_days | int >= 0
+      - automatic_updates_debian_ubuntu_upgrade_interval_days | int >= 0
+      - automatic_updates_debian_ubuntu_reboot_enabled | type_debug == "bool"
+      - automatic_updates_debian_ubuntu_reboot_time | string | length > 0
+      - automatic_updates_debian_ubuntu_reboot_with_users | type_debug == "bool"
+      - automatic_updates_debian_ubuntu_needrestart_enabled | type_debug == "bool"
+      - automatic_updates_debian_ubuntu_apt_listchanges_enabled | type_debug == "bool"
+      - automatic_updates_debian_ubuntu_apt_listchanges_log_path is match("^/")
+      - automatic_updates_debian_ubuntu_extra_origins_patterns | type_debug == "list"
+      - automatic_updates_debian_ubuntu_package_blacklist | type_debug == "list"
+    fail_msg: >-
+      automatic_updates_debian_ubuntu supports Debian and Ubuntu hosts only and
+      requires valid boolean, interval, path, and list variables.
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Install apt-listchanges logging packages
+  ansible.builtin.apt:
+    name:
+      - apt-listchanges
+      - logrotate
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: automatic_updates_debian_ubuntu_apt_listchanges_enabled | bool
+
+- name: Install needrestart
+  ansible.builtin.apt:
+    name: needrestart
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: automatic_updates_debian_ubuntu_needrestart_enabled | bool
+
+- name: Configure APT periodic unattended upgrades
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure unattended-upgrades policy
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure apt-listchanges logging
+  when: automatic_updates_debian_ubuntu_apt_listchanges_enabled | bool
+  block:
+    - name: Ensure apt-listchanges config directory exists
+      ansible.builtin.file:
+        path: /etc/apt/listchanges.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure apt-listchanges for noninteractive file logging
+      ansible.builtin.template:
+        src: apt-listchanges.conf.j2
+        dest: /etc/apt/listchanges.conf.d/90-homeops-automatic-updates.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Ensure apt-listchanges log directory exists
+      ansible.builtin.file:
+        path: "{{ automatic_updates_debian_ubuntu_apt_listchanges_log_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ensure apt-listchanges log file exists
+      ansible.builtin.copy:
+        dest: "{{ automatic_updates_debian_ubuntu_apt_listchanges_log_path }}"
+        content: ""
+        force: false
+        owner: root
+        group: adm
+        mode: '0640'
+
+    - name: Ensure apt-listchanges log permissions
+      ansible.builtin.file:
+        path: "{{ automatic_updates_debian_ubuntu_apt_listchanges_log_path }}"
+        state: file
+        owner: root
+        group: adm
+        mode: '0640'
+
+    - name: Configure apt-listchanges log rotation
+      ansible.builtin.template:
+        src: apt-listchanges-logrotate.j2
+        dest: /etc/logrotate.d/automatic-updates-debian-ubuntu-apt-listchanges
+        owner: root
+        group: root
+        mode: '0644'
+
+- name: Remove role-managed apt-listchanges config when disabled
+  when: not (automatic_updates_debian_ubuntu_apt_listchanges_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/listchanges.conf.d/90-homeops-automatic-updates.conf
+    - /etc/logrotate.d/automatic-updates-debian-ubuntu-apt-listchanges
+
+- name: Configure needrestart automatic service restarts
+  when: automatic_updates_debian_ubuntu_needrestart_enabled | bool
+  block:
+    - name: Ensure needrestart config directory exists
+      ansible.builtin.file:
+        path: /etc/needrestart/conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure needrestart automatic restart mode
+      ansible.builtin.template:
+        src: needrestart-auto.conf.j2
+        dest: /etc/needrestart/conf.d/90-homeops-automatic-updates.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+- name: Remove role-managed needrestart config when disabled
+  when: not (automatic_updates_debian_ubuntu_needrestart_enabled | bool)
+  ansible.builtin.file:
+    path: /etc/needrestart/conf.d/90-homeops-automatic-updates.conf
+    state: absent
+
+- name: Manage APT systemd timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: "{{ automatic_updates_debian_ubuntu_enabled | bool }}"
+    state: "{{ (automatic_updates_debian_ubuntu_enabled | bool) | ternary('started', 'stopped') }}"
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  when: ansible_service_mgr == "systemd"

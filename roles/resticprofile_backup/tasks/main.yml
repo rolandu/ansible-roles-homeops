@@ -1,0 +1,31 @@
+---
+- name: Validate Resticprofile role control settings
+  ansible.builtin.assert:
+    that:
+      - resticprofile_teardown | type_debug == "bool"
+      - resticprofile_install_packages | type_debug == "bool"
+      - resticprofile_schedule_enabled | type_debug == "bool"
+      - resticprofile_check_schedule_enabled | type_debug == "bool"
+      - resticprofile_one_file_system | type_debug == "bool"
+      - resticprofile_sources | type_debug == "list"
+      - resticprofile_excludes | type_debug == "list"
+      - resticprofile_tags | type_debug == "list"
+      - resticprofile_targets | type_debug == "list"
+      - resticprofile_retention is mapping
+      - resticprofile_extra_config is mapping
+      - resticprofile_packages | type_debug == "list"
+      - resticprofile_log_mode is match('^0?[0-7]{3,4}$')
+      - resticprofile_gatus_enabled | type_debug == "bool"
+      - resticprofile_group_continue_on_error | type_debug == "bool"
+    fail_msg: >-
+      resticprofile_backup requires boolean controls and one-filesystem policy,
+      list-based sources, exclusions, tags and packages, mapping-based
+      retention/environment/extra configuration, and a valid log mode.
+
+- name: Remove Resticprofile backup configuration
+  ansible.builtin.include_tasks: teardown.yml
+  when: resticprofile_teardown
+
+- name: Configure Resticprofile backup
+  ansible.builtin.include_tasks: configure.yml
+  when: not resticprofile_teardown

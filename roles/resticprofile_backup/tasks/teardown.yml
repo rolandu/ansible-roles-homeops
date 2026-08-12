@@ -1,0 +1,13 @@
+---
+- name: Remove Resticprofile managed files and directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ resticprofile_cron_file }}"
+    - "{{ resticprofile_logrotate_file }}"
+    - "{{ resticprofile_config_dir }}"
+    - "{{ resticprofile_binary_path }}"
+    - "{{ resticprofile_install_root }}"
+    - "{{ resticprofile_download_dir }}"
+    - "{{ resticprofile_log_file }}"

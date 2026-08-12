@@ -1,0 +1,10 @@
+---
+- name: Teardown resticprofile_backup
+  hosts: resticprofile_backup_targets
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: resticprofile_backup
+      vars:
+        resticprofile_teardown: true

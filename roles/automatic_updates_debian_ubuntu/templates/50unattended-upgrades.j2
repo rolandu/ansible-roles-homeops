@@ -1,0 +1,32 @@
+Unattended-Upgrade::Origins-Pattern {
+{% if ansible_distribution == "Ubuntu" %}
+        "origin=Ubuntu,archive=${distro_codename}-security";
+        "origin=UbuntuESMApps,archive=${distro_codename}-apps-security";
+        "origin=UbuntuESM,archive=${distro_codename}-infra-security";
+{% else %}
+        "origin=Debian,codename=${distro_codename},label=Debian-Security";
+        "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+{% endif %}
+{% for origin_pattern in automatic_updates_debian_ubuntu_extra_origins_patterns %}
+        "{{ origin_pattern | replace('\\', '\\\\') | replace('"', '\\"') }}";
+{% endfor %}
+};
+
+Unattended-Upgrade::Package-Blacklist {
+{% for package_pattern in automatic_updates_debian_ubuntu_package_blacklist %}
+        "{{ package_pattern | replace('\\', '\\\\') | replace('"', '\\"') }}";
+{% endfor %}
+};
+
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::InstallOnShutdown "false";
+Unattended-Upgrade::Mail "";
+Unattended-Upgrade::MailReport "on-change";
+Unattended-Upgrade::Automatic-Reboot "{{ (automatic_updates_debian_ubuntu_reboot_enabled | bool) | ternary('true', 'false') }}";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "{{ (automatic_updates_debian_ubuntu_reboot_with_users | bool) | ternary('true', 'false') }}";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ automatic_updates_debian_ubuntu_reboot_time }}";
+Unattended-Upgrade::SyslogEnable "false";
+Unattended-Upgrade::Verbose "false";
+Unattended-Upgrade::Debug "false";
+Unattended-Upgrade::Allow-downgrade "false";

@@ -1,0 +1,25 @@
+---
+# Master toggle for automatic APT periodic update runs.
+automatic_updates_debian_ubuntu_enabled: true
+
+# APT::Periodic intervals in days. The conservative default is daily.
+automatic_updates_debian_ubuntu_update_interval_days: 1
+automatic_updates_debian_ubuntu_upgrade_interval_days: 1
+
+# unattended-upgrades reboot behavior when /var/run/reboot-required exists.
+automatic_updates_debian_ubuntu_reboot_enabled: true
+automatic_updates_debian_ubuntu_reboot_time: "now"
+automatic_updates_debian_ubuntu_reboot_with_users: true
+
+# Restart services that still use old libraries after package upgrades.
+automatic_updates_debian_ubuntu_needrestart_enabled: true
+
+# Log Debian package NEWS/changelog entries for unattended APT runs.
+automatic_updates_debian_ubuntu_apt_listchanges_enabled: true
+automatic_updates_debian_ubuntu_apt_listchanges_log_path: /var/log/apt/listchanges.log
+
+# Extra unattended-upgrades Origins-Pattern entries. Default remains security-only.
+automatic_updates_debian_ubuntu_extra_origins_patterns: []
+
+# Python regular expressions for packages to exclude from unattended upgrades.
+automatic_updates_debian_ubuntu_package_blacklist: []

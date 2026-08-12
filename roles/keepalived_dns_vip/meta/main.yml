@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: rolandu
+  description: Manage a Keepalived VRRP floating IP for redundant DNS servers.
+  license: MIT
+  min_ansible_version: 2.13
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []

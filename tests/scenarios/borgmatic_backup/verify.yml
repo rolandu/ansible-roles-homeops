@@ -1,0 +1,179 @@
+---
+- name: Verify borgmatic_backup
+  hosts: role_backup
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Inspect Borgmatic managed files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/borgmatic
+        - /usr/local/bin/borg
+        - /usr/local/bin/borgmatic
+        - /etc/borgmatic
+        - /etc/borgmatic/config.yaml
+        - /etc/cron.d/borgmatic-backup
+        - /etc/logrotate.d/borgmatic-backup
+        - /var/log/borgmatic-backup.log
+      register: borgmatic_managed_files
+
+    - name: Read managed Borgmatic configuration
+      ansible.builtin.slurp:
+        src: /etc/borgmatic/config.yaml
+      register: borgmatic_config_file
+
+    - name: Read managed Borgmatic cron file
+      ansible.builtin.slurp:
+        src: /etc/cron.d/borgmatic-backup
+      register: borgmatic_cron_file
+
+    - name: Read managed Borgmatic logrotate file
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/borgmatic-backup
+      register: borgmatic_logrotate_file
+
+    - name: Read installed Borg version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borg
+          - --version
+      register: borgmatic_borg_version
+      changed_when: false
+
+    - name: Read installed Borgmatic version
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - --version
+      register: borgmatic_version
+      changed_when: false
+
+    - name: Assert Borgmatic managed state
+      ansible.builtin.assert:
+        that:
+          - managed_stats['/opt/borgmatic'].isdir
+          - managed_stats['/usr/local/bin/borg'].islnk
+          - managed_stats['/usr/local/bin/borgmatic'].islnk
+          - managed_stats['/etc/borgmatic'].mode == '0700'
+          - managed_stats['/etc/borgmatic/config.yaml'].mode == '0600'
+          - managed_stats['/etc/cron.d/borgmatic-backup'].mode == '0644'
+          - managed_stats['/etc/logrotate.d/borgmatic-backup'].mode == '0644'
+          - managed_stats['/var/log/borgmatic-backup.log'].mode == '0640'
+          - config_text is search('/var/lib/borgmatic-test-repository')
+          - config_text is search('label: local')
+          - config_text is search('/srv/borgmatic-test')
+          - config_text is search('/srv/borgmatic-test/excluded')
+          - config_text is search('keep_daily: 7')
+          - cron_text is search('15 0 \\* \\* \\* root')
+          - cron_text is search('/usr/bin/flock')
+          - cron_text is search('/run/lock/borgmatic-backup.lock')
+          - cron_text is search('/usr/local/bin/borgmatic')
+          - cron_text is search('create --stats --config /etc/borgmatic/config.yaml')
+          - logrotate_text is search('/var/log/borgmatic-backup.log')
+          - borgmatic_borg_version.stdout is search('1\\.4\\.4')
+          - borgmatic_version.stdout is search('2\\.1\\.2')
+      vars:
+        managed_stats: >-
+          {{ borgmatic_managed_files.results
+             | items2dict(key_name='item', value_name='stat') }}
+        config_text: "{{ borgmatic_config_file.content | b64decode }}"
+        cron_text: "{{ borgmatic_cron_file.content | b64decode }}"
+        logrotate_text: "{{ borgmatic_logrotate_file.content | b64decode }}"
+
+    - name: Initialize temporary Borg repository explicitly
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - repo-create
+          - --encryption
+          - repokey-blake2
+          - --repository
+          - local
+          - --config
+          - /etc/borgmatic/config.yaml
+      register: borgmatic_repo_create
+      changed_when: borgmatic_repo_create.rc == 0
+
+    - name: Back up Borgmatic scenario canary
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - create
+          - --repository
+          - local
+          - --stats
+          - --config
+          - /etc/borgmatic/config.yaml
+      register: borgmatic_create
+      changed_when: borgmatic_create.rc == 0
+
+    - name: Check temporary Borg repository
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - check
+          - --repository
+          - local
+          - --force
+          - --config
+          - /etc/borgmatic/config.yaml
+      changed_when: false
+
+    - name: List temporary Borg repository archives
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - repo-list
+          - --repository
+          - local
+          - --config
+          - /etc/borgmatic/config.yaml
+      register: borgmatic_repo_list
+      changed_when: false
+
+    - name: Assert Borgmatic archive listing is non-empty
+      ansible.builtin.assert:
+        that:
+          - borgmatic_repo_list.stdout | length > 0
+
+    - name: Create Borgmatic restore destination
+      ansible.builtin.file:
+        path: /tmp/borgmatic-restore
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Restore latest Borgmatic scenario archive
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/borgmatic
+          - extract
+          - --repository
+          - local
+          - --archive
+          - latest
+          - --destination
+          - /tmp/borgmatic-restore
+          - --config
+          - /etc/borgmatic/config.yaml
+      register: borgmatic_extract
+      changed_when: borgmatic_extract.rc == 0
+
+    - name: Read restored Borgmatic scenario canary
+      ansible.builtin.slurp:
+        src: /tmp/borgmatic-restore/srv/borgmatic-test/canary.txt
+      register: borgmatic_restored_canary
+
+    - name: Inspect excluded restored file
+      ansible.builtin.stat:
+        path: /tmp/borgmatic-restore/srv/borgmatic-test/excluded/omitted.txt
+      register: borgmatic_restored_excluded_file
+
+    - name: Assert Borgmatic canary restore
+      ansible.builtin.assert:
+        that:
+          - borgmatic_restored_canary.content | b64decode == "borgmatic scenario canary\n"
+          - not borgmatic_restored_excluded_file.stat.exists

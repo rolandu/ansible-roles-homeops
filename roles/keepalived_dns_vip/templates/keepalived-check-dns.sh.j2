@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+answer="$(dig @"{{ keepalived_dns_check_server }}" \
+  -p "{{ keepalived_dns_check_port }}" \
+  "{{ keepalived_dns_check_name }}" \
+  "{{ keepalived_dns_check_type }}" \
+  +time={{ keepalived_dns_check_timeout }} \
+  +tries={{ keepalived_dns_check_tries }} \
+  +short \
+  2>/dev/null)" || exit 1
+
+[ -n "${answer}" ]
