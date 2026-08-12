@@ -25,6 +25,7 @@ tags:
   - security
 dependencies:
   ansible.posix: ">=1.5.4,<3.0.0"
+  community.docker: ">=3.13.10,<6.0.0"
 repository: https://github.com/rolandu/ansible-roles-homeops
 documentation: >-
   https://github.com/rolandu/ansible-roles-homeops/blob/main/README.md

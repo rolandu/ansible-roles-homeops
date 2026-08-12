@@ -1,0 +1,41 @@
+---
+- name: Verify automatic updates are disabled safely
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Inspect automatic update resources
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/sbin/docker-compose-project-compose-scenario-update
+        - /etc/cron.d/docker-compose-project-compose-scenario-update
+        - /etc/logrotate.d/docker-compose-project-compose-scenario-update
+      register: scenario_update_resources
+
+    - name: Inspect retained automatic update log
+      ansible.builtin.stat:
+        path: /var/log/docker-compose-project-compose-scenario-update.log
+      register: scenario_update_log
+
+    - name: List running new service containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --filter
+          - label=com.docker.compose.service=new-service
+          - --format
+          - "{{ '{{' }}.ID{{ '}}' }}"
+      register: scenario_running_service
+      changed_when: false
+
+    - name: Require disabled execution, retained log, and running project
+      ansible.builtin.assert:
+        that:
+          - not (scenario_update_resources.results | map(attribute='stat.exists') | max)
+          - scenario_update_log.stat.exists
+          - scenario_running_service.stdout_lines | length == 1

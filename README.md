@@ -10,9 +10,10 @@ Ansible roles for home/family infrastructure (servers, laptops, workstations, et
 ## Collection dependencies
 
 `galaxy.yml` declares `ansible.posix`, which supplies the `sysctl` module used
-by the OpenVPN and WireGuard roles. Deployment repositories should pin an
-exact compatible version in their own Galaxy requirements for reproducible
-controller setup.
+by the OpenVPN and WireGuard roles, and `community.docker`, which supplies the
+Compose v2 module used by Docker application roles. Deployment repositories
+should pin exact compatible versions in their own Galaxy requirements for
+reproducible controller setup.
 
 ## What is in it?
 
@@ -21,6 +22,7 @@ controller setup.
 - [certbot_hetzner](roles/certbot_hetzner/): uses Hetzner's DNS system and certbot to generate *Let's encrypt* certificates
 - [certificates_replicate](roles/certificates_replicate/): pulls certificate directories from another host over SSH/rsync and optionally reloads nginx when files change.
 - [certificates_replicate_dsm](roles/certificates_replicate_dsm/): downloads a DSM certificate update script, wraps it with inventory configuration, and prints the Synology Task Scheduler command.
+- [docker_compose_project](roles/docker_compose_project/): manages one caller-defined Compose project, its directories and files, and optional locked image refresh scheduling.
 - [host_health_heartbeat](roles/host_health_heartbeat/): installs a configurable host health heartbeat script that reports to an HTTP monitoring endpoint.
 - [hosts_file](roles/hosts_file/): manages persistent `/etc/hosts` entries using the same `domain`/`answer` format as AdGuard Home rewrites.
 - [keepalived_dns_vip](roles/keepalived_dns_vip/): manages a Keepalived VRRP floating IP for redundant DNS servers with a DNS-answer health check.
@@ -93,24 +95,26 @@ playbooks in this repository.
 ### Docker scenario tests
 
 Docker-backed scenario tests live under `tests/scenarios/`. These tests create
-temporary SSH-enabled Ubuntu containers and run Ansible against them over real
-SSH.
+temporary SSH-enabled containers and run Ansible against them over real SSH.
 
 Current scenarios:
 
 ```bash
 tests/scenarios/automatic_updates_debian_ubuntu/run.sh
 tests/scenarios/borgmatic_backup/run.sh
+tests/scenarios/docker_compose_project/run.sh
+tests/scenarios/openvpn_client/run.sh
 tests/scenarios/resticprofile_backup/run.sh
 tests/scenarios/ssh_user_keys_generate/run.sh
 tests/scenarios/ssh_user_keys_install/run.sh
 tests/scenarios/ssh_users/run.sh
 ```
 
-The scenarios build a shared Ubuntu SSH target image from
-`tests/scenarios/_common/ubuntu-ssh-target/Dockerfile`, create temporary
-inventories under `.ansible-tmp/`, run converge, check idempotence with a second
-converge, and run a verification playbook.
+Most scenarios build the shared Ubuntu SSH target image from
+`tests/scenarios/_common/ubuntu-ssh-target/Dockerfile`; the Compose scenario
+uses an isolated Docker-in-Docker target. They create temporary inventories
+under `.ansible-tmp/`, run converge, check idempotence with a second converge,
+and run verification playbooks.
 
 The current user must be able to access Docker. After installing Docker or
 adding your user to the `docker` group, log out and back in before running the

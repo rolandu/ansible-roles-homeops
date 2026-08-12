@@ -1,0 +1,15 @@
+---
+- name: Teardown Docker Compose project role
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Stop scenario Docker Compose project
+      ansible.builtin.include_role:
+        name: docker_compose_project
+      vars:
+        docker_compose_project_name: compose-scenario
+        docker_compose_project_dir: /opt/compose-scenario
+        docker_compose_project_docker_cli: /usr/local/bin/docker
+        docker_compose_project_teardown: true

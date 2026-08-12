@@ -1,0 +1,35 @@
+---
+- name: Remove Docker Compose project automatic update execution resources
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ docker_compose_project_update_script_path }}"
+    - "{{ docker_compose_project_update_cron_file }}"
+    - "{{ docker_compose_project_update_logrotate_file }}"
+
+- name: Inspect existing Docker Compose definition for teardown
+  ansible.builtin.stat:
+    path: >-
+      {{ docker_compose_project_dir }}/{{ docker_compose_project_effective_compose_filename }}
+  register: docker_compose_project_teardown_compose
+
+- name: Require existing Docker Compose definition for teardown
+  ansible.builtin.assert:
+    that:
+      - docker_compose_project_teardown_compose.stat.exists
+      - docker_compose_project_teardown_compose.stat.isreg
+      - docker_compose_project_teardown_compose.stat.readable
+    fail_msg: >-
+      Docker Compose project teardown needs the existing managed Compose
+      definition and will not guess containers or remove resources by label.
+
+- name: Stop Docker Compose project without deleting data
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_compose_project_dir }}"
+    project_name: "{{ docker_compose_project_name }}"
+    files:
+      - "{{ docker_compose_project_effective_compose_filename }}"
+    state: stopped
+    build: never
+    docker_cli: "{{ docker_compose_project_docker_cli }}"

@@ -1,0 +1,30 @@
+---
+- name: Verify changed Docker Compose service definition
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: List scenario project containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --all
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --format
+          - "{{ '{{' }}.Label \"com.docker.compose.service\"{{ '}}' }}:{{ '{{' }}.State{{ '}}' }}"
+      register: scenario_project_containers
+      changed_when: false
+
+    - name: Read persistent data canary
+      ansible.builtin.slurp:
+        src: /srv/homeops-compose-scenario/data/canary.txt
+      register: scenario_data_canary
+
+    - name: Require old service removal, new service, and preserved data
+      ansible.builtin.assert:
+        that:
+          - scenario_project_containers.stdout_lines == ['new-service:running']
+          - "'preserved across Compose down' in (scenario_data_canary.content | b64decode)"

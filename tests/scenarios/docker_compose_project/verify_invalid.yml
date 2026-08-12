@@ -1,0 +1,37 @@
+---
+- name: Verify invalid candidate caused no disruption
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Read installed Docker Compose definition
+      ansible.builtin.slurp:
+        src: /opt/compose-scenario/compose.yml
+      register: scenario_installed_compose
+
+    - name: Inspect temporary Compose candidate
+      ansible.builtin.stat:
+        path: /opt/compose-scenario/.compose.yml.ansible-candidate
+      register: scenario_candidate
+
+    - name: List running new service containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --filter
+          - label=com.docker.compose.service=new-service
+          - --format
+          - "{{ '{{' }}.ID{{ '}}' }}"
+      register: scenario_new_service
+      changed_when: false
+
+    - name: Require previous definition and service to remain intact
+      ansible.builtin.assert:
+        that:
+          - "'new-service:' in (scenario_installed_compose.content | b64decode)"
+          - not scenario_candidate.stat.exists
+          - scenario_new_service.stdout_lines | length == 1

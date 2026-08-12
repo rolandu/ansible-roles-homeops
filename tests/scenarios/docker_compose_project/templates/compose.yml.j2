@@ -1,0 +1,10 @@
+---
+services:
+  {{ scenario_service_name }}:
+    image: alpine:3.21
+    command:
+      - sh
+      - -c
+      - trap 'exit 0' TERM; while true; do sleep 1; done
+    volumes:
+      - /srv/homeops-compose-scenario/data:/data

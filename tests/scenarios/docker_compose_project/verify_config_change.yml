@@ -1,0 +1,39 @@
+---
+- name: Verify managed configuration recreation
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: List current old service containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --filter
+          - label=com.docker.compose.service=old-service
+          - --format
+          - "{{ '{{' }}.ID{{ '}}' }}"
+      register: scenario_current_service
+      changed_when: false
+
+    - name: Read initial service container ID
+      ansible.builtin.slurp:
+        src: /tmp/docker-compose-project-initial-container-id
+      register: scenario_initial_service
+
+    - name: Read changed scenario configuration
+      ansible.builtin.slurp:
+        src: /srv/homeops-compose-scenario/config/config.ini
+      register: scenario_changed_config
+
+    - name: Require config-only change to recreate the service
+      ansible.builtin.assert:
+        that:
+          - scenario_current_service.stdout_lines | length == 1
+          - >-
+            scenario_current_service.stdout
+            != (scenario_initial_service.content | b64decode | trim)
+          - "'value=updated' in (scenario_changed_config.content | b64decode)"

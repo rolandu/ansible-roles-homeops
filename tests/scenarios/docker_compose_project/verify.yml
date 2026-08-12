@@ -1,0 +1,159 @@
+---
+- name: Verify Docker Compose project role
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Inspect managed scenario paths
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/compose-scenario/compose.yml
+        - /srv/homeops-compose-scenario/config/config.ini
+        - /srv/homeops-compose-scenario/config/static.txt
+        - /usr/local/sbin/docker-compose-project-compose-scenario-update
+        - /etc/cron.d/docker-compose-project-compose-scenario-update
+        - /etc/logrotate.d/docker-compose-project-compose-scenario-update
+        - /var/log/docker-compose-project-compose-scenario-update.log
+      register: scenario_managed_paths
+
+    - name: Require managed scenario paths
+      ansible.builtin.assert:
+        that:
+          - scenario_managed_paths.results | map(attribute='stat.exists') | min
+
+    - name: Inspect sensitive configuration mode
+      ansible.builtin.stat:
+        path: /srv/homeops-compose-scenario/config/config.ini
+      register: scenario_config_stat
+
+    - name: Require restrictive sensitive configuration mode
+      ansible.builtin.assert:
+        that:
+          - scenario_config_stat.stat.mode == '0640'
+
+    - name: List old scenario service containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --filter
+          - label=com.docker.compose.service=old-service
+          - --format
+          - "{{ '{{' }}.ID{{ '}}' }}"
+      register: scenario_old_service
+      changed_when: false
+
+    - name: Require old scenario service to be running
+      ansible.builtin.assert:
+        that:
+          - scenario_old_service.stdout_lines | length == 1
+
+    - name: Record initial service container ID
+      ansible.builtin.copy:
+        dest: /tmp/docker-compose-project-initial-container-id
+        owner: root
+        group: root
+        mode: '0600'
+        content: "{{ scenario_old_service.stdout }}\n"
+
+    - name: Reset automatic update call log
+      ansible.builtin.file:
+        path: /tmp/docker-compose-project-update-calls
+        state: absent
+
+    - name: Run successful automatic update
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/docker-compose-project-compose-scenario-update
+      register: scenario_update_success
+      changed_when: false
+
+    - name: Read successful automatic update calls
+      ansible.builtin.slurp:
+        src: /tmp/docker-compose-project-update-calls
+      register: scenario_update_calls
+
+    - name: Require ordered, conservative automatic update commands
+      ansible.builtin.assert:
+        that:
+          - scenario_update_success.rc == 0
+          - scenario_update_lines | length == 3
+          - "' config --quiet' in scenario_update_lines[0]"
+          - "' pull' in scenario_update_lines[1]"
+          - "' up --detach --no-build --pull never --wait --wait-timeout 30' in scenario_update_lines[2]"
+          - "'--force-recreate' not in scenario_update_lines[2]"
+          - "'--remove-orphans' not in scenario_update_lines[2]"
+      vars:
+        scenario_update_lines: >-
+          {{ (scenario_update_calls.content | b64decode).splitlines() }}
+
+    - name: Make automatic update pull fail
+      ansible.builtin.file:
+        path: /tmp/docker-compose-project-fail-pull
+        state: touch
+        mode: '0600'
+
+    - name: Reset automatic update call log before failure
+      ansible.builtin.file:
+        path: /tmp/docker-compose-project-update-calls
+        state: absent
+
+    - name: Run automatic update with failed pull
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/docker-compose-project-compose-scenario-update
+      register: scenario_update_failure
+      changed_when: false
+      failed_when: false
+
+    - name: Read failed automatic update calls
+      ansible.builtin.slurp:
+        src: /tmp/docker-compose-project-update-calls
+      register: scenario_failed_update_calls
+
+    - name: Require failed pull to prevent convergence
+      ansible.builtin.assert:
+        that:
+          - scenario_update_failure.rc != 0
+          - "' pull' in scenario_failed_update_text"
+          - "' up ' not in scenario_failed_update_text"
+      vars:
+        scenario_failed_update_text: >-
+          {{ scenario_failed_update_calls.content | b64decode }}
+
+    - name: Remove automatic update pull failure marker
+      ansible.builtin.file:
+        path: /tmp/docker-compose-project-fail-pull
+        state: absent
+
+    - name: Hold automatic update lock
+      ansible.builtin.command:
+        argv:
+          - flock
+          - /run/docker-compose-project-compose-scenario-update.lock
+          - sleep
+          - '10'
+      async: 12
+      poll: 0
+      changed_when: false
+
+    - name: Wait for lock holder
+      ansible.builtin.pause:
+        seconds: 1
+
+    - name: Run automatic update while locked
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/docker-compose-project-compose-scenario-update
+      register: scenario_locked_update
+      changed_when: false
+
+    - name: Require concurrent automatic update to skip safely
+      ansible.builtin.assert:
+        that:
+          - scenario_locked_update.rc == 0
+          - "'another run holds the lock' in scenario_locked_update.stdout"

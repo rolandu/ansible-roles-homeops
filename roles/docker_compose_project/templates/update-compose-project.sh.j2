@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly PROJECT_NAME={{ docker_compose_project_name | quote }}
+readonly PROJECT_DIR={{ docker_compose_project_dir | quote }}
+readonly COMPOSE_FILE={{ docker_compose_project_effective_compose_filename | quote }}
+readonly DOCKER_CLI={{ docker_compose_project_effective_updates_docker_cli | quote }}
+readonly LOCK_FILE={{ docker_compose_project_update_lock_file | quote }}
+readonly WAIT_TIMEOUT={{ docker_compose_project_effective_wait_timeout | int }}
+
+log() {
+  printf '[%s] %s\n' "$(date --iso-8601=seconds)" "$*"
+}
+
+compose() {
+  "$DOCKER_CLI" compose \
+    --project-name "$PROJECT_NAME" \
+    --project-directory "$PROJECT_DIR" \
+    --file "$PROJECT_DIR/$COMPOSE_FILE" \
+    "$@"
+}
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "Automatic update skipped for $PROJECT_NAME: another run holds the lock"
+  exit 0
+fi
+
+log "Automatic update started for $PROJECT_NAME"
+
+if ! compose config --quiet; then
+  log "Automatic update failed for $PROJECT_NAME: Compose validation failed"
+  exit 1
+fi
+
+if ! compose pull; then
+  log "Automatic update failed for $PROJECT_NAME: image pull failed"
+  exit 1
+fi
+
+update_args=(up --detach --no-build --pull never)
+{% if docker_compose_project_effective_wait %}
+update_args+=(--wait --wait-timeout "$WAIT_TIMEOUT")
+{% endif %}
+
+if ! compose "${update_args[@]}"; then
+  log "Automatic update failed for $PROJECT_NAME: Compose convergence failed"
+  exit 1
+fi
+
+log "Automatic update succeeded for $PROJECT_NAME"

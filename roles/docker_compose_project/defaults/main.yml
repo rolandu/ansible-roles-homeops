@@ -1,0 +1,58 @@
+---
+app_root_dir: "/opt"
+
+docker_compose_project_name: ""
+docker_compose_project_dir: >-
+  {{ app_root_dir }}/{{ docker_compose_project_name }}
+docker_compose_project_dir_owner: root
+docker_compose_project_dir_group: root
+docker_compose_project_dir_mode: '0750'
+docker_compose_project_docker_cli: /usr/bin/docker
+
+docker_compose_project_compose:
+  src: ""
+  filename: compose.yml
+  owner: root
+  group: root
+  mode: '0640'
+  sensitive: false
+
+docker_compose_project_directories: []
+docker_compose_project_templates: []
+docker_compose_project_files: []
+
+docker_compose_project_deploy:
+  pull: always
+  wait: true
+  wait_timeout: 60
+  remove_orphans: false
+  down_on_compose_change: true
+  recreate_on_managed_change: true
+
+docker_compose_project_updates:
+  enabled: false
+  install_packages: true
+  packages:
+    - cron
+    - logrotate
+    - util-linux
+  docker_cli: "{{ docker_compose_project_docker_cli }}"
+  cron:
+    minute: '17'
+    hour: '4'
+    day: '*'
+    month: '*'
+    weekday: '*'
+
+docker_compose_project_update_script_path: >-
+  /usr/local/sbin/docker-compose-project-{{ docker_compose_project_name }}-update
+docker_compose_project_update_cron_file: >-
+  /etc/cron.d/docker-compose-project-{{ docker_compose_project_name }}-update
+docker_compose_project_update_log_file: >-
+  /var/log/docker-compose-project-{{ docker_compose_project_name }}-update.log
+docker_compose_project_update_logrotate_file: >-
+  /etc/logrotate.d/docker-compose-project-{{ docker_compose_project_name }}-update
+docker_compose_project_update_lock_file: >-
+  /run/docker-compose-project-{{ docker_compose_project_name }}-update.lock
+
+docker_compose_project_teardown: false

@@ -1,0 +1,92 @@
+---
+- name: Converge Docker Compose project role
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: true
+
+  vars:
+    scenario_service_name: old-service
+    scenario_config_value: initial
+    scenario_secret_value: scenario-secret-value
+
+  tasks:
+    - name: Install scenario automatic update Docker stub
+      ansible.builtin.copy:
+        dest: /usr/local/bin/scenario-docker-stub
+        owner: root
+        group: root
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          printf '%s\n' "$*" >> /tmp/docker-compose-project-update-calls
+          case " $* " in
+            *" pull "*) test ! -e /tmp/docker-compose-project-fail-pull ;;
+            *) exit 0 ;;
+          esac
+
+    - name: Deploy scenario Docker Compose project
+      ansible.builtin.include_role:
+        name: docker_compose_project
+      vars:
+        docker_compose_project_name: compose-scenario
+        docker_compose_project_dir: /opt/compose-scenario
+        docker_compose_project_docker_cli: /usr/local/bin/docker
+        docker_compose_project_compose:
+          src: "{{ playbook_dir }}/templates/compose.yml.j2"
+          filename: compose.yml
+          owner: root
+          group: root
+          mode: '0640'
+          sensitive: false
+        docker_compose_project_directories:
+          - path: /srv/homeops-compose-scenario
+            owner: root
+            group: root
+            mode: '0750'
+          - path: /srv/homeops-compose-scenario/data
+            owner: root
+            group: root
+            mode: '0750'
+          - path: /srv/homeops-compose-scenario/config
+            owner: root
+            group: root
+            mode: '0750'
+        docker_compose_project_templates:
+          - src: "{{ playbook_dir }}/templates/config.ini.j2"
+            dest: /srv/homeops-compose-scenario/config/config.ini
+            owner: root
+            group: root
+            mode: '0640'
+            sensitive: true
+        docker_compose_project_files:
+          - src: "{{ playbook_dir }}/files/static.txt"
+            dest: /srv/homeops-compose-scenario/config/static.txt
+            owner: root
+            group: root
+            mode: '0644'
+            sensitive: false
+        docker_compose_project_deploy:
+          pull: missing
+          wait: true
+          wait_timeout: 30
+          remove_orphans: false
+          down_on_compose_change: true
+          recreate_on_managed_change: true
+        docker_compose_project_updates:
+          enabled: true
+          install_packages: false
+          docker_cli: /usr/local/bin/scenario-docker-stub
+          cron:
+            minute: '17'
+            hour: '4'
+            day: '*'
+            month: '*'
+            weekday: '*'
+
+    - name: Install persistent data canary
+      ansible.builtin.copy:
+        dest: /srv/homeops-compose-scenario/data/canary.txt
+        owner: root
+        group: root
+        mode: '0640'
+        content: preserved across Compose down
