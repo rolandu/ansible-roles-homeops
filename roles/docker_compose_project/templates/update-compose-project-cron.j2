@@ -1,0 +1,7 @@
+# Refresh images for the {{ docker_compose_project_name }} Docker Compose project.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# minute hour day month weekday user command
+{{ docker_compose_project_effective_update_cron.minute }} {{ docker_compose_project_effective_update_cron.hour }} {{ docker_compose_project_effective_update_cron.day }} {{ docker_compose_project_effective_update_cron.month }} {{ docker_compose_project_effective_update_cron.weekday }} root {{ docker_compose_project_update_script_path | quote }} >>{{ docker_compose_project_update_log_file | quote }} 2>&1

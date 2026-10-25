@@ -1,0 +1,215 @@
+---
+- name: Verify Docker Compose v2 is available
+  ansible.builtin.command:
+    argv:
+      - "{{ docker_compose_project_docker_cli }}"
+      - compose
+      - version
+      - --short
+  register: docker_compose_project_compose_version
+  changed_when: false
+
+- name: Ensure Docker Compose project directory exists
+  ansible.builtin.file:
+    path: "{{ docker_compose_project_dir }}"
+    state: directory
+    owner: "{{ docker_compose_project_dir_owner }}"
+    group: "{{ docker_compose_project_dir_group }}"
+    mode: "{{ docker_compose_project_dir_mode }}"
+
+- name: Ensure Docker Compose project data directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ docker_compose_project_directories }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Render Docker Compose project configuration templates
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ docker_compose_project_templates }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: docker_compose_project_template_results
+  diff: "{{ not (item.sensitive | default(false) | bool) }}"
+  no_log: "{{ item.sensitive | default(false) | bool }}"
+
+- name: Copy Docker Compose project static files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ docker_compose_project_files }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: docker_compose_project_file_results
+  diff: "{{ not (item.sensitive | default(false) | bool) }}"
+  no_log: "{{ item.sensitive | default(false) | bool }}"
+
+- name: Manage validated Docker Compose definition candidate
+  when: not ansible_check_mode
+  block:
+    - name: Render candidate Docker Compose definition
+      ansible.builtin.template:
+        src: "{{ docker_compose_project_effective_compose_src }}"
+        dest: >-
+          {{ docker_compose_project_dir }}/.{{ docker_compose_project_effective_compose_filename }}.ansible-candidate
+        owner: root
+        group: root
+        mode: '0600'
+      changed_when: false
+      diff: false
+      no_log: "{{ docker_compose_project_effective_compose_sensitive }}"
+
+    - name: Validate candidate Docker Compose definition
+      ansible.builtin.command:
+        argv:
+          - "{{ docker_compose_project_docker_cli }}"
+          - compose
+          - --project-name
+          - "{{ docker_compose_project_name }}"
+          - --project-directory
+          - "{{ docker_compose_project_dir }}"
+          - --file
+          - >-
+            {{ docker_compose_project_dir }}/.{{ docker_compose_project_effective_compose_filename }}.ansible-candidate
+          - config
+          - --quiet
+      changed_when: false
+      no_log: "{{ docker_compose_project_effective_compose_sensitive }}"
+
+    - name: Inspect installed Docker Compose definition
+      ansible.builtin.stat:
+        path: >-
+          {{ docker_compose_project_dir }}/{{ docker_compose_project_effective_compose_filename }}
+        checksum_algorithm: sha256
+      register: docker_compose_project_installed_compose
+
+    - name: Inspect candidate Docker Compose definition
+      ansible.builtin.stat:
+        path: >-
+          {{ docker_compose_project_dir }}/.{{ docker_compose_project_effective_compose_filename }}.ansible-candidate
+        checksum_algorithm: sha256
+      register: docker_compose_project_candidate_compose
+
+    - name: Determine whether Docker Compose definition changed
+      ansible.builtin.set_fact:
+        docker_compose_project_definition_changed: >-
+          {{
+            not docker_compose_project_installed_compose.stat.exists
+            or docker_compose_project_installed_compose.stat.checksum
+               != docker_compose_project_candidate_compose.stat.checksum
+          }}
+
+    - name: Bring down project through previous Compose definition
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_compose_project_dir }}"
+        project_name: "{{ docker_compose_project_name }}"
+        files:
+          - "{{ docker_compose_project_effective_compose_filename }}"
+        state: absent
+        remove_volumes: false
+        docker_cli: "{{ docker_compose_project_docker_cli }}"
+      when:
+        - docker_compose_project_installed_compose.stat.exists
+        - docker_compose_project_definition_changed
+        - docker_compose_project_effective_down_on_change
+
+    - name: Install validated Docker Compose definition
+      ansible.builtin.copy:
+        src: >-
+          {{ docker_compose_project_dir }}/.{{ docker_compose_project_effective_compose_filename }}.ansible-candidate
+        dest: >-
+          {{ docker_compose_project_dir }}/{{ docker_compose_project_effective_compose_filename }}
+        remote_src: true
+        owner: "{{ docker_compose_project_effective_compose_owner }}"
+        group: "{{ docker_compose_project_effective_compose_group }}"
+        mode: "{{ docker_compose_project_effective_compose_mode }}"
+      register: docker_compose_project_compose_install_result
+      diff: "{{ not docker_compose_project_effective_compose_sensitive }}"
+      no_log: "{{ docker_compose_project_effective_compose_sensitive }}"
+  always:
+    - name: Remove temporary Docker Compose definition candidate
+      ansible.builtin.file:
+        path: >-
+          {{ docker_compose_project_dir }}/.{{ docker_compose_project_effective_compose_filename }}.ansible-candidate
+        state: absent
+      changed_when: false
+
+- name: Check candidate Docker Compose definition in check mode
+  ansible.builtin.template:
+    src: "{{ docker_compose_project_effective_compose_src }}"
+    dest: >-
+      {{ docker_compose_project_dir }}/{{ docker_compose_project_effective_compose_filename }}
+    owner: "{{ docker_compose_project_effective_compose_owner }}"
+    group: "{{ docker_compose_project_effective_compose_group }}"
+    mode: "{{ docker_compose_project_effective_compose_mode }}"
+  register: docker_compose_project_compose_install_result
+  diff: "{{ not docker_compose_project_effective_compose_sensitive }}"
+  no_log: "{{ docker_compose_project_effective_compose_sensitive }}"
+  when: ansible_check_mode
+
+- name: Determine whether managed Docker Compose artifacts changed
+  ansible.builtin.set_fact:
+    docker_compose_project_managed_artifact_changed: >-
+      {{
+        docker_compose_project_compose_install_result.changed | default(false)
+        or (
+          docker_compose_project_template_results.results
+          | default([])
+          | selectattr('changed', 'defined')
+          | selectattr('changed')
+          | list
+          | length > 0
+        )
+        or (
+          docker_compose_project_file_results.results
+          | default([])
+          | selectattr('changed', 'defined')
+          | selectattr('changed')
+          | list
+          | length > 0
+        )
+      }}
+
+- name: Converge Docker Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_compose_project_dir }}"
+    project_name: "{{ docker_compose_project_name }}"
+    files:
+      - "{{ docker_compose_project_effective_compose_filename }}"
+    state: present
+    build: never
+    pull: "{{ docker_compose_project_effective_pull }}"
+    remove_orphans: "{{ docker_compose_project_effective_remove_orphans }}"
+    recreate: >-
+      {{
+        'always'
+        if (
+          docker_compose_project_effective_recreate_on_change
+          and docker_compose_project_managed_artifact_changed
+        )
+        else 'auto'
+      }}
+    wait: "{{ docker_compose_project_effective_wait }}"
+    wait_timeout: >-
+      {{
+        docker_compose_project_effective_wait_timeout
+        if docker_compose_project_effective_wait
+        else omit
+      }}
+    docker_cli: "{{ docker_compose_project_docker_cli }}"
+  when: not ansible_check_mode
+
+- name: Manage Docker Compose project automatic updates
+  ansible.builtin.include_tasks: manage_updates.yml

@@ -1,0 +1,84 @@
+---
+- name: Validate automatic update platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == 'Debian'
+    fail_msg: >-
+      Automatic Docker Compose project update package management currently
+      supports Debian and Ubuntu targets only.
+  when:
+    - docker_compose_project_effective_updates_enabled
+    - docker_compose_project_effective_updates_install_packages
+
+- name: Install automatic update dependencies
+  ansible.builtin.package:
+    name: "{{ docker_compose_project_effective_updates_packages }}"
+    state: present
+  when:
+    - docker_compose_project_effective_updates_enabled
+    - docker_compose_project_effective_updates_install_packages
+
+- name: Verify automatic update Docker CLI exists
+  ansible.builtin.stat:
+    path: "{{ docker_compose_project_effective_updates_docker_cli }}"
+  register: docker_compose_project_update_docker_cli_stat
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Require executable automatic update Docker CLI
+  ansible.builtin.assert:
+    that:
+      - docker_compose_project_update_docker_cli_stat.stat.exists
+      - docker_compose_project_update_docker_cli_stat.stat.isreg
+      - docker_compose_project_update_docker_cli_stat.stat.executable
+    fail_msg: >-
+      docker_compose_project_updates.docker_cli must reference an existing
+      executable file when automatic updates are enabled.
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Ensure automatic update log exists
+  ansible.builtin.file:
+    path: "{{ docker_compose_project_update_log_file }}"
+    state: touch
+    owner: root
+    group: root
+    mode: '0640'
+    modification_time: preserve
+    access_time: preserve
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Render automatic update script
+  ansible.builtin.template:
+    src: update-compose-project.sh.j2
+    dest: "{{ docker_compose_project_update_script_path }}"
+    owner: root
+    group: root
+    mode: '0750'
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Render automatic update cron file
+  ansible.builtin.template:
+    src: update-compose-project-cron.j2
+    dest: "{{ docker_compose_project_update_cron_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Render automatic update logrotate policy
+  ansible.builtin.template:
+    src: update-compose-project-logrotate.j2
+    dest: "{{ docker_compose_project_update_logrotate_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: docker_compose_project_effective_updates_enabled
+
+- name: Remove disabled automatic update execution resources
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ docker_compose_project_update_script_path }}"
+    - "{{ docker_compose_project_update_cron_file }}"
+    - "{{ docker_compose_project_update_logrotate_file }}"
+  when: not docker_compose_project_effective_updates_enabled

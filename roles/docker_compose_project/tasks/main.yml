@@ -1,0 +1,268 @@
+---
+- name: Validate Docker Compose project control variables
+  ansible.builtin.assert:
+    that:
+      - docker_compose_project_name is string
+      - docker_compose_project_name is match('^[a-z0-9][a-z0-9_-]*$')
+      - docker_compose_project_dir is string
+      - docker_compose_project_dir is match('^/.+')
+      - docker_compose_project_dir is not search('[\r\n]')
+      - docker_compose_project_dir_owner | string | length > 0
+      - docker_compose_project_dir_group | string | length > 0
+      - docker_compose_project_dir_mode is match('^0[0-7]{3}$')
+      - docker_compose_project_docker_cli is string
+      - docker_compose_project_docker_cli is match('^/.+')
+      - docker_compose_project_compose is mapping
+      - docker_compose_project_directories | type_debug == 'list'
+      - docker_compose_project_templates | type_debug == 'list'
+      - docker_compose_project_files | type_debug == 'list'
+      - docker_compose_project_deploy is mapping
+      - docker_compose_project_updates is mapping
+      - docker_compose_project_teardown | type_debug == 'bool'
+    fail_msg: >-
+      docker_compose_project needs a safe lowercase project name, absolute
+      project and Docker CLI paths, valid ownership/mode settings, mappings,
+      lists, and a boolean teardown control.
+
+- name: Build effective Docker Compose project settings
+  ansible.builtin.set_fact:
+    docker_compose_project_effective_compose_src: >-
+      {{ docker_compose_project_compose.src | default('') }}
+    docker_compose_project_effective_compose_filename: >-
+      {{ docker_compose_project_compose.filename | default('compose.yml') }}
+    docker_compose_project_effective_compose_owner: >-
+      {{ docker_compose_project_compose.owner | default('root') }}
+    docker_compose_project_effective_compose_group: >-
+      {{ docker_compose_project_compose.group | default('root') }}
+    docker_compose_project_effective_compose_mode: >-
+      {{ docker_compose_project_compose.mode | default('0640') }}
+    docker_compose_project_effective_compose_sensitive: >-
+      {{ docker_compose_project_compose.sensitive | default(false) }}
+    docker_compose_project_effective_pull: >-
+      {{ docker_compose_project_deploy.pull | default('always') }}
+    docker_compose_project_effective_wait: >-
+      {{ docker_compose_project_deploy.wait | default(true) }}
+    docker_compose_project_effective_wait_timeout: >-
+      {{ docker_compose_project_deploy.wait_timeout | default(60) }}
+    docker_compose_project_effective_remove_orphans: >-
+      {{ docker_compose_project_deploy.remove_orphans | default(false) }}
+    docker_compose_project_effective_down_on_change: >-
+      {{ docker_compose_project_deploy.down_on_compose_change | default(true) }}
+    docker_compose_project_effective_recreate_on_change: >-
+      {{ docker_compose_project_deploy.recreate_on_managed_change | default(true) }}
+    docker_compose_project_effective_updates_enabled: >-
+      {{ docker_compose_project_updates.enabled | default(false) }}
+    docker_compose_project_effective_updates_install_packages: >-
+      {{ docker_compose_project_updates.install_packages | default(true) }}
+    docker_compose_project_effective_updates_packages: >-
+      {{ docker_compose_project_updates.packages | default(['cron', 'logrotate', 'util-linux']) }}
+    docker_compose_project_effective_updates_docker_cli: >-
+      {{ docker_compose_project_updates.docker_cli | default(docker_compose_project_docker_cli) }}
+    docker_compose_project_effective_update_cron: >-
+      {{
+        docker_compose_project_updates.cron
+        | default({
+            'minute': '17',
+            'hour': '4',
+            'day': '*',
+            'month': '*',
+            'weekday': '*'
+          })
+      }}
+
+- name: Validate Docker Compose definition settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        docker_compose_project_compose.keys()
+        | difference(['src', 'filename', 'owner', 'group', 'mode', 'sensitive'])
+        | length == 0
+      - >-
+        docker_compose_project_teardown
+        or docker_compose_project_effective_compose_src | string | length > 0
+      - docker_compose_project_effective_compose_src is not search('[\r\n]')
+      - >-
+        docker_compose_project_effective_compose_filename
+        is match('^[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$')
+      - docker_compose_project_effective_compose_owner | string | length > 0
+      - docker_compose_project_effective_compose_group | string | length > 0
+      - docker_compose_project_effective_compose_mode is match('^0[0-7]{3}$')
+      - >-
+        docker_compose_project_effective_compose_sensitive
+        | type_debug == 'bool'
+    fail_msg: >-
+      docker_compose_project_compose supports only src, filename, owner,
+      group, mode, and sensitive; configure runs need a source template and
+      all effective values must be valid.
+
+- name: Validate Docker Compose project directory entries
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | difference(['path', 'owner', 'group', 'mode']) | length == 0
+      - item.path is defined
+      - item.path is string
+      - item.path is match('^/.+')
+      - item.path is not search('[\r\n]')
+      - item.owner is defined
+      - item.owner | string | length > 0
+      - item.group is defined
+      - item.group | string | length > 0
+      - item.mode is defined
+      - item.mode is match('^0[0-7]{3}$')
+    fail_msg: >-
+      Each docker_compose_project_directories item needs only path, owner,
+      group, and a quoted four-digit mode; path must be absolute.
+  loop: "{{ docker_compose_project_directories }}"
+  loop_control:
+    label: "{{ item.path | default('<missing-path>') }}"
+
+- name: Validate Docker Compose project template entries
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - >-
+        item.keys()
+        | difference(['src', 'dest', 'owner', 'group', 'mode', 'sensitive'])
+        | length == 0
+      - item.src is defined
+      - item.src | string | length > 0
+      - item.src is not search('[\r\n]')
+      - item.dest is defined
+      - item.dest is string
+      - item.dest is match('^/.+')
+      - item.dest is not search('[\r\n]')
+      - item.owner is defined
+      - item.owner | string | length > 0
+      - item.group is defined
+      - item.group | string | length > 0
+      - item.mode is defined
+      - item.mode is match('^0[0-7]{3}$')
+      - item.sensitive | default(false) | type_debug == 'bool'
+    fail_msg: >-
+      Each docker_compose_project_templates item needs src, absolute dest,
+      owner, group, quoted mode, and an optional boolean sensitive field.
+  loop: "{{ docker_compose_project_templates }}"
+  loop_control:
+    label: "{{ item.dest | default('<missing-dest>') }}"
+
+- name: Validate Docker Compose project static file entries
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - >-
+        item.keys()
+        | difference(['src', 'dest', 'owner', 'group', 'mode', 'sensitive'])
+        | length == 0
+      - item.src is defined
+      - item.src | string | length > 0
+      - item.src is not search('[\r\n]')
+      - item.dest is defined
+      - item.dest is string
+      - item.dest is match('^/.+')
+      - item.dest is not search('[\r\n]')
+      - item.owner is defined
+      - item.owner | string | length > 0
+      - item.group is defined
+      - item.group | string | length > 0
+      - item.mode is defined
+      - item.mode is match('^0[0-7]{3}$')
+      - item.sensitive | default(false) | type_debug == 'bool'
+    fail_msg: >-
+      Each docker_compose_project_files item needs src, absolute dest, owner,
+      group, quoted mode, and an optional boolean sensitive field.
+  loop: "{{ docker_compose_project_files }}"
+  loop_control:
+    label: "{{ item.dest | default('<missing-dest>') }}"
+
+- name: Validate Docker Compose deployment settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        docker_compose_project_deploy.keys()
+        | difference([
+            'pull',
+            'wait',
+            'wait_timeout',
+            'remove_orphans',
+            'down_on_compose_change',
+            'recreate_on_managed_change'
+          ])
+        | length == 0
+      - >-
+        docker_compose_project_effective_pull
+        in ['always', 'missing', 'never', 'policy']
+      - docker_compose_project_effective_wait | type_debug == 'bool'
+      - docker_compose_project_effective_wait_timeout | int > 0
+      - >-
+        docker_compose_project_effective_remove_orphans
+        | type_debug == 'bool'
+      - >-
+        docker_compose_project_effective_down_on_change
+        | type_debug == 'bool'
+      - >-
+        docker_compose_project_effective_recreate_on_change
+        | type_debug == 'bool'
+    fail_msg: >-
+      docker_compose_project_deploy contains unsupported keys or invalid pull,
+      wait, timeout, orphan, down-on-change, or recreation values.
+
+- name: Validate Docker Compose update settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        docker_compose_project_updates.keys()
+        | difference(['enabled', 'install_packages', 'packages', 'docker_cli', 'cron'])
+        | length == 0
+      - docker_compose_project_effective_updates_enabled | type_debug == 'bool'
+      - >-
+        docker_compose_project_effective_updates_install_packages
+        | type_debug == 'bool'
+      - docker_compose_project_effective_updates_packages | type_debug == 'list'
+      - docker_compose_project_effective_updates_docker_cli is string
+      - docker_compose_project_effective_updates_docker_cli is match('^/.+')
+      - docker_compose_project_effective_update_cron is mapping
+      - >-
+        docker_compose_project_effective_update_cron.keys()
+        | difference(['minute', 'hour', 'day', 'month', 'weekday'])
+        | length == 0
+      - >-
+        ['minute', 'hour', 'day', 'month', 'weekday']
+        | difference(docker_compose_project_effective_update_cron.keys())
+        | length == 0
+    fail_msg: >-
+      docker_compose_project_updates needs supported boolean/package/Docker
+      settings and all five cron fields.
+
+- name: Validate Docker Compose update packages
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | length > 0
+      - item is not search('[\r\n]')
+    fail_msg: >-
+      Every docker_compose_project_updates.packages entry must be a non-empty
+      package name without a newline.
+  loop: "{{ docker_compose_project_effective_updates_packages }}"
+
+- name: Validate Docker Compose update cron fields
+  ansible.builtin.assert:
+    that:
+      - item.value is string
+      - item.value | length > 0
+      - item.value is not search('\\s')
+      - item.value is not search('[\r\n]')
+    fail_msg: >-
+      Every docker_compose_project_updates.cron field must be a non-empty
+      whitespace-free string.
+  loop: "{{ docker_compose_project_effective_update_cron | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Configure Docker Compose project
+  ansible.builtin.include_tasks: configure.yml
+  when: not docker_compose_project_teardown
+
+- name: Teardown Docker Compose project
+  ansible.builtin.include_tasks: teardown.yml
+  when: docker_compose_project_teardown

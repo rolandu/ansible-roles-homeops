@@ -45,6 +45,16 @@ roles/certificates_replicate_dsm/meta/main.yml: Role metadata for DSM certificat
 roles/certificates_replicate_dsm/tasks/main.yml: Downloads DSM helper tooling, writes inventory-specific wrapper scripts, and prints the scheduler command.
 roles/certificates_replicate_dsm/templates/dsm-task-replicate-certificates.sh.j2: Synology Task Scheduler wrapper template for running DSM certificate replication.
 roles/certificates_replicate_dsm/templates/replicate-certificates.sh.j2: DSM certificate replication script template used by the scheduled wrapper.
+roles/docker_compose_project/README.md: Role contract, examples, update policy, manual commands, and non-destructive teardown behavior.
+roles/docker_compose_project/defaults/main.yml: Default project, Compose, artifact, convergence, scheduling, and teardown settings.
+roles/docker_compose_project/meta/main.yml: Metadata for the reusable Docker Compose project role.
+roles/docker_compose_project/tasks/configure.yml: Renders and validates artifacts, safely replaces changed Compose definitions, and converges the project.
+roles/docker_compose_project/tasks/main.yml: Validates the strict role interface and dispatches configure or teardown behavior.
+roles/docker_compose_project/tasks/manage_updates.yml: Installs or removes the locked cron updater, log, and logrotate resources.
+roles/docker_compose_project/tasks/teardown.yml: Removes scheduling and stops a known Compose project while preserving state.
+roles/docker_compose_project/templates/update-compose-project-cron.j2: Explicit cron.d schedule for one Compose project updater.
+roles/docker_compose_project/templates/update-compose-project-logrotate.j2: Logrotate policy for one Compose project update log.
+roles/docker_compose_project/templates/update-compose-project.sh.j2: Locked validate-pull-up script for scheduled image refresh.
 roles/host_health_heartbeat/README.md: Role documentation for reporting host health to an HTTP monitoring endpoint.
 roles/host_health_heartbeat/defaults/main.yml: Default heartbeat endpoint, checks, timing, script, log, and cron configuration.
 roles/host_health_heartbeat/meta/main.yml: Role metadata for host health heartbeat reporting.
@@ -166,6 +176,24 @@ tests/scenarios/borgmatic_backup/run.sh: Docker-backed runner for install, idemp
 tests/scenarios/borgmatic_backup/teardown.yml: Scenario playbook enabling explicit Borgmatic role teardown.
 tests/scenarios/borgmatic_backup/verify.yml: Scenario assertions plus explicit local repository creation, backup, check, listing, and canary restore.
 tests/scenarios/borgmatic_backup/verify_teardown.yml: Verifies role-owned files are removed while the local Borg repository remains intact.
+tests/scenarios/docker_compose_project/Dockerfile: Privileged Python 3.11 Docker-in-Docker SSH target for isolated Compose tests.
+tests/scenarios/docker_compose_project/change_compose.yml: Replaces the scenario service name to exercise old-definition down behavior.
+tests/scenarios/docker_compose_project/change_config.yml: Changes only a managed config template to exercise forced recreation without Compose down.
+tests/scenarios/docker_compose_project/converge.yml: Deploys the scenario project, caller artifacts, update stub, and persistent canary.
+tests/scenarios/docker_compose_project/disable_updates.yml: Disables scheduled updates while reconverging the running scenario project.
+tests/scenarios/docker_compose_project/files/static.txt: Caller-owned static file fixture for the Compose role scenario.
+tests/scenarios/docker_compose_project/invalid_candidate.yml: Attempts deployment with a deliberately invalid Compose candidate.
+tests/scenarios/docker_compose_project/run.sh: Isolated runner for convergence, idempotence, safety paths, updater, and teardown.
+tests/scenarios/docker_compose_project/teardown.yml: Stops the scenario project through explicit role teardown.
+tests/scenarios/docker_compose_project/templates/compose.yml.j2: Minimal caller-owned Compose definition with a bind-mounted data directory.
+tests/scenarios/docker_compose_project/templates/config.ini.j2: Sensitive caller-owned configuration template fixture.
+tests/scenarios/docker_compose_project/templates/invalid-compose.yml.j2: Invalid Compose model fixture used to prove pre-down validation.
+tests/scenarios/docker_compose_project/verify.yml: Verifies managed state and exercises update ordering, failure, and locking.
+tests/scenarios/docker_compose_project/verify_change.yml: Verifies renamed service cleanup and persistent canary preservation.
+tests/scenarios/docker_compose_project/verify_config_change.yml: Verifies the config content and service container changed after config-only convergence.
+tests/scenarios/docker_compose_project/verify_invalid.yml: Verifies invalid candidate cleanup and prior-project continuity.
+tests/scenarios/docker_compose_project/verify_teardown.yml: Verifies stopped containers and preserved files, data, and logs.
+tests/scenarios/docker_compose_project/verify_updates_disabled.yml: Verifies schedule cleanup, retained log, and running project state.
 tests/scenarios/openvpn_client/converge.yml: Installs a configured OpenVPN client watchdog in the disposable scenario target.
 tests/scenarios/openvpn_client/run.sh: Docker-backed runner for watchdog rendering, behavior, locking, idempotence, and disable cleanup.
 tests/scenarios/openvpn_client/teardown.yml: Disables the scenario OpenVPN client watchdog.

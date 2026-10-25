@@ -1,0 +1,37 @@
+---
+- name: Verify Docker Compose project teardown
+  hosts: docker_compose_project_targets
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: List stopped scenario service containers
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/docker
+          - ps
+          - --all
+          - --filter
+          - label=com.docker.compose.project=compose-scenario
+          - --filter
+          - label=com.docker.compose.service=new-service
+          - --format
+          - "{{ '{{' }}.State{{ '}}' }}"
+      register: scenario_stopped_service
+      changed_when: false
+
+    - name: Inspect preserved scenario state
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/compose-scenario/compose.yml
+        - /srv/homeops-compose-scenario/config/config.ini
+        - /srv/homeops-compose-scenario/data/canary.txt
+        - /var/log/docker-compose-project-compose-scenario-update.log
+      register: scenario_preserved_state
+
+    - name: Require stopped service and preserved project state
+      ansible.builtin.assert:
+        that:
+          - scenario_stopped_service.stdout_lines == ['exited']
+          - scenario_preserved_state.results | map(attribute='stat.exists') | min

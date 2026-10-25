@@ -6,7 +6,7 @@ inventory for every role.
 
 Each scenario follows the same lifecycle:
 
-1. Build the shared Ubuntu 22.04 SSH target image.
+1. Build an SSH target image for the scenario.
 2. Start one temporary container.
 3. Generate a temporary controller SSH key.
 4. Install that controller public key into the container with `docker exec`.
@@ -23,6 +23,11 @@ The target image intentionally uses Ubuntu 22.04 rather than 24.04. The
 controller-side Ansible package used by this repo can fail against Python 3.12
 targets with `ansible.module_utils.six.moves` import errors; Ubuntu 22.04 keeps
 the target Python at a compatible version.
+
+The `docker_compose_project` scenario is the exception: it uses a privileged
+Docker-in-Docker target based on Alpine 3.19/Python 3.11. Its Docker daemon is
+isolated inside the disposable target and the host Docker socket is never
+mounted.
 
 ## Scenarios
 
@@ -80,6 +85,17 @@ permissions, cron schedule, idempotence, timestamped healthy and repair logs,
 suppression of raw command output, DNS and ping failure repair paths,
 per-connection locking, and safe disable cleanup. Command stubs keep the
 scenario local to the disposable container; it does not contact a VPN server.
+
+Run the Docker Compose project scenario:
+
+```bash
+tests/scenarios/docker_compose_project/run.sh
+```
+
+This verifies caller-owned templates and files, idempotence, sensitive file
+permissions, recreation, validation before old-definition down, renamed
+service removal, data preservation, update locking and failure ordering,
+disable cleanup, and non-destructive teardown against the nested Docker daemon.
 
 Run the Resticprofile backup scenario:
 

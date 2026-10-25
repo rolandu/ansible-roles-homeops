@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  author: rolandu
+  description: Manage one caller-defined Docker Compose project.
+  license: MIT
+  min_ansible_version: '2.13'
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+  galaxy_tags:
+    - docker
+    - compose
+    - containers
+    - system
+
+dependencies: []
