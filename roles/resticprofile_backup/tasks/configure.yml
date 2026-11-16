@@ -2,9 +2,9 @@
 - name: Validate Resticprofile platform, paths, and schedule
   ansible.builtin.assert:
     that:
-      - ansible_os_family == "Debian"
-      - ansible_architecture in resticprofile_architecture_map
-      - resticprofile_architecture_map[ansible_architecture] in resticprofile_checksums
+      - ansible_facts['os_family'] == "Debian"
+      - ansible_facts['architecture'] in resticprofile_architecture_map
+      - resticprofile_architecture_map[ansible_facts['architecture']] in resticprofile_checksums
       - resticprofile_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
       - resticprofile_group_name is match('^[A-Za-z0-9_.-]+$')
       - resticprofile_group_name not in ['version', 'global', 'groups', 'includes']
@@ -172,9 +172,9 @@
 - name: Set Resticprofile release facts
   ansible.builtin.set_fact:
     _resticprofile_release_arch: >-
-      {{ resticprofile_architecture_map[ansible_architecture] }}
+      {{ resticprofile_architecture_map[ansible_facts['architecture']] }}
     _resticprofile_archive_name: >-
-      resticprofile_no_self_update_{{ resticprofile_version }}_linux_{{ resticprofile_architecture_map[ansible_architecture] }}.tar.gz
+      resticprofile_no_self_update_{{ resticprofile_version }}_linux_{{ resticprofile_architecture_map[ansible_facts['architecture']] }}.tar.gz
 
 - name: Install Resticprofile runtime packages
   ansible.builtin.package:

@@ -18,10 +18,15 @@
       - item.netmask is defined
       - item.netmask | string | trim | length > 0
       - item.openvpn_ca_passphrase is defined
+      - item.openvpn_ca_passphrase is string
       - item.openvpn_ca_passphrase | string | trim | length > 0
+      - "'\n' not in item.openvpn_ca_passphrase"
+      - "'\r' not in item.openvpn_ca_passphrase"
       - item.openvpn_mgmt_password is defined
       - item.openvpn_mgmt_password | string | trim | length > 0
-    fail_msg: "Each VPN entry must define vpn_name, server_hostname, network, netmask, openvpn_ca_passphrase, and openvpn_mgmt_password."
+    fail_msg: >-
+      Each VPN entry must define vpn_name, server_hostname, network, netmask,
+      a nonempty single-line openvpn_ca_passphrase, and openvpn_mgmt_password.
   no_log: true
   loop: "{{ openvpn_config }}"
   loop_control:
@@ -36,6 +41,31 @@
   loop: "{{ openvpn_config }}"
   loop_control:
     label: "{{ item.vpn_name | default(item.server_hostname | default('undefined')) }}"
+
+- name: Validate CRL renewal controls
+  ansible.builtin.assert:
+    that:
+      - openvpn_crl_renewal_enabled is boolean
+      - openvpn_crl_validity_days | type_debug == 'int'
+      - openvpn_crl_renew_before_days | type_debug == 'int'
+      - openvpn_crl_renew_before_days | int > 0
+      - openvpn_crl_validity_days | int > openvpn_crl_renew_before_days | int
+      - openvpn_crl_renewal_schedule is string
+      - openvpn_crl_renewal_schedule.split() | length == 5
+      - openvpn_crl_renewal_schedule is match('^[0-9*/ ,\-]+$')
+    fail_msg: >-
+      CRL renewal needs a boolean enable flag, positive integer renewal days
+      smaller than the validity days, and a five-field numeric cron schedule.
+
+- name: Validate VPN names used in CRL renewal paths
+  ansible.builtin.assert:
+    that:
+      - item.vpn_name is match('^[A-Za-z0-9][A-Za-z0-9_-]*$')
+    fail_msg: "vpn_name must contain only letters, digits, underscores and hyphens."
+  loop: "{{ openvpn_config }}"
+  loop_control:
+    label: "{{ item.vpn_name }}"
+  no_log: true
 
 - name: Configure OpenVPN server instances
   include_tasks: server_instance.yml

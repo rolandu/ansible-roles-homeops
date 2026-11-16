@@ -1,0 +1,85 @@
+---
+- name: Set CRL renewal paths
+  ansible.builtin.set_fact:
+    openvpn_crl_renewal_script: "/usr/local/sbin/openvpn-crl-{{ openvpn_vpn_name }}"
+    openvpn_crl_password_file: "/etc/openvpn/crl-renewal/{{ openvpn_vpn_name }}.pass"
+    openvpn_crl_renewal_log: "/var/log/openvpn-crl-{{ openvpn_vpn_name }}.log"
+
+- name: Ensure CRL renewal directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/openvpn/crl-renewal, mode: '0700'}
+    - {path: /usr/local/sbin, mode: '0755'}
+    - {path: /etc/cron.d, mode: '0755'}
+    - {path: /etc/logrotate.d, mode: '0755'}
+
+- name: Store protected CA password for unattended CRL signing
+  ansible.builtin.copy:
+    content: "{{ openvpn_ca_passphrase }}\n"
+    dest: "{{ openvpn_crl_password_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Install CRL renewal entrypoint
+  ansible.builtin.template:
+    src: renew-crl.py.j2
+    dest: "{{ openvpn_crl_renewal_script }}"
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Renew and publish CRL when needed
+  ansible.builtin.command:
+    argv: >-
+      {{ [openvpn_crl_renewal_script]
+         + (['--force'] if openvpn_revoke_changed | default(false) | bool else []) }}
+  register: openvpn_crl_renewal_result
+  changed_when: "'changed=true' in openvpn_crl_renewal_result.stdout"
+  when: not ansible_check_mode
+
+- name: Ensure private CRL renewal log exists
+  ansible.builtin.file:
+    path: "{{ openvpn_crl_renewal_log }}"
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Enable cron for automatic CRL renewal
+  ansible.builtin.service:
+    name: cron
+    enabled: true
+    state: started
+  when: openvpn_crl_renewal_enabled | bool
+
+- name: Install CRL renewal cron and log rotation
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - src: crl-renewal-cron.j2
+      dest: "/etc/cron.d/openvpn-crl-{{ openvpn_vpn_name }}"
+    - src: crl-renewal-logrotate.j2
+      dest: "/etc/logrotate.d/openvpn-crl-{{ openvpn_vpn_name }}"
+  when: openvpn_crl_renewal_enabled | bool
+
+- name: Remove disabled CRL renewal cron and log rotation
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/cron.d/openvpn-crl-{{ openvpn_vpn_name }}"
+    - "/etc/logrotate.d/openvpn-crl-{{ openvpn_vpn_name }}"
+  when: not openvpn_crl_renewal_enabled | bool

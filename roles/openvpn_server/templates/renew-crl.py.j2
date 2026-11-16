@@ -1,0 +1,122 @@
+#!/usr/bin/python3
+"""Maintain one OpenVPN CRL using the existing EasyRSA CA and revocation index."""
+
+import argparse
+import datetime
+import fcntl
+import hashlib
+import locale
+import os
+from pathlib import Path
+import pwd
+import subprocess
+import sys
+import tempfile
+
+EASYRSA_DIR = Path({{ easyrsa_dir | to_json }})
+DEPLOYED_CRL = Path({{ openvpn_crl_file | to_json }})
+PASSWORD_FILE = {{ openvpn_crl_password_file | to_json }}
+VALIDITY_DAYS = {{ openvpn_crl_validity_days }}
+RENEW_BEFORE_DAYS = {{ openvpn_crl_renew_before_days }}
+SOURCE_CRL = EASYRSA_DIR / "pki/crl.pem"
+INDEX = EASYRSA_DIR / "pki/index.txt"
+LOCK = Path("/run/lock/openvpn-crl-" + hashlib.sha256(
+    str(EASYRSA_DIR.resolve()).encode()).hexdigest()[:16] + ".lock")
+
+
+def log(message):
+    stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    print(f"[{stamp}] {message}", flush=True)
+
+
+def expiry(path):
+    result = subprocess.run(
+        ["openssl", "crl", "-in", str(path), "-noout", "-nextupdate"],
+        capture_output=True, text=True, check=True,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    value = result.stdout.strip().partition("nextUpdate=")[2]
+    return datetime.datetime.strptime(value, "%b %d %H:%M:%S %Y GMT").replace(
+        tzinfo=datetime.timezone.utc)
+
+
+def needs_renewal(force):
+    if force or not SOURCE_CRL.exists():
+        return True
+    try:
+        if expiry(SOURCE_CRL) <= datetime.datetime.now(datetime.timezone.utc) + \
+                datetime.timedelta(days=RENEW_BEFORE_DAYS):
+            return True
+    except (subprocess.CalledProcessError, ValueError):
+        return True
+    return INDEX.stat().st_mtime_ns > SOURCE_CRL.stat().st_mtime_ns
+
+
+def maintain(args):
+    renew = needs_renewal(args.force)
+    account = pwd.getpwnam("openvpn")
+    publish = renew or not DEPLOYED_CRL.exists() or (
+        SOURCE_CRL.read_bytes() != DEPLOYED_CRL.read_bytes())
+    if DEPLOYED_CRL.exists():
+        metadata = DEPLOYED_CRL.lstat()
+        publish = publish or DEPLOYED_CRL.is_symlink() or (
+            metadata.st_uid != account.pw_uid or metadata.st_gid != account.pw_gid
+            or metadata.st_mode & 0o7777 != 0o640)
+    if args.dry_run:
+        log(f"Dry run: renew={str(renew).lower()} publish={str(publish).lower()}")
+        return
+    if renew:
+        # Never put the password itself in argv, the environment, or output.
+        env = {**os.environ, "EASYRSA_PASSIN": "file:" + PASSWORD_FILE,
+               "EASYRSA_CRL_DAYS": str(VALIDITY_DAYS), "LC_ALL": "C"}
+        subprocess.run(
+            [str(EASYRSA_DIR / "easyrsa"), "--batch", "gen-crl"],
+            cwd=EASYRSA_DIR, env=env, check=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if expiry(SOURCE_CRL) <= datetime.datetime.now(datetime.timezone.utc) + \
+                datetime.timedelta(days=RENEW_BEFORE_DAYS):
+            raise ValueError("Generated CRL does not outlast the renewal window")
+    if publish:
+        # A failed sign/write must leave the previously deployed CRL untouched.
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=DEPLOYED_CRL.parent, delete=False) as out:
+                temporary = Path(out.name)
+                out.write(SOURCE_CRL.read_bytes())
+                out.flush()
+                os.fsync(out.fileno())
+                os.fchown(out.fileno(), account.pw_uid, account.pw_gid)
+                os.fchmod(out.fileno(), 0o640)
+            os.replace(temporary, DEPLOYED_CRL)
+        finally:
+            if temporary is not None and temporary.exists():
+                temporary.unlink()
+    log(f"changed={str(renew or publish).lower()} CRL valid until {expiry(SOURCE_CRL).isoformat()}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true", help="Inspect without signing or writing")
+    parser.add_argument("--force", action="store_true", help="Regenerate even a current CRL")
+    args = parser.parse_args()
+    locale.setlocale(locale.LC_TIME, "C")
+    if args.dry_run:
+        maintain(args)
+        return
+    with LOCK.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # Deployment must wait/retry rather than continue with a stale CRL.
+            raise RuntimeError("Another CRL renewal is running; retry shortly") from None
+        maintain(args)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.SubprocessError, RuntimeError, KeyError) as error:
+        # Suppress subprocess output and secret-bearing exception details.
+        log(f"ERROR: CRL renewal failed ({type(error).__name__}); deployed CRL was preserved if publication did not finish")
+        sys.exit(1)
