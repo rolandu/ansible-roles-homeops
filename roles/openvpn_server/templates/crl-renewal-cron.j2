@@ -1,0 +1,4 @@
+# Managed by Ansible. Renew before the CRL expires; no VPN restart required.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+{{ openvpn_crl_renewal_schedule }} root {{ openvpn_crl_renewal_script }} >> {{ openvpn_crl_renewal_log }} 2>&1

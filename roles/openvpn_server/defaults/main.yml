@@ -16,6 +16,12 @@ openvpn_default_dns_servers: []
 openvpn_default_dns_domain: "."
 openvpn_force_restart_after_run: false
 
+# CRLs expire independently of certificates. Renew during convergence and daily.
+openvpn_crl_renewal_enabled: true
+openvpn_crl_renewal_schedule: "23 3 * * *"
+openvpn_crl_validity_days: 180
+openvpn_crl_renew_before_days: 30
+
 # Local controller path for exported artifacts
 artifacts_dir: "{{ inventory_dir }}/artifacts"
 

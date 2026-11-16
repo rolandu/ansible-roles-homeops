@@ -5,6 +5,7 @@
     openvpn_server_hostname: "{{ ovpn_server.server_hostname | default(inventory_hostname) }}"
 
 - name: Set server facts ({{ openvpn_vpn_name }})
+  no_log: true
   set_fact:
     openvpn_network: "{{ ovpn_server.network }}"
     openvpn_netmask: "{{ ovpn_server.netmask }}"
@@ -174,6 +175,10 @@
         name:
           - openvpn
           - easy-rsa
+          - openssl
+          - python3
+          - cron
+          - logrotate
         state: present
         update_cache: true
 
@@ -232,11 +237,6 @@
     path: "{{ easyrsa_dir }}/pki/index.txt"
   register: openvpn_index_stat
 
-- name: Stat EasyRSA CRL ({{ openvpn_vpn_name }})
-  stat:
-    path: "{{ easyrsa_dir }}/pki/crl.pem"
-  register: openvpn_crl_stat
-
 - name: Default revoked CN list ({{ openvpn_vpn_name }})
   set_fact:
     openvpn_revoked_cns: []
@@ -287,22 +287,6 @@
     openvpn_revoke_changed: "{{ (openvpn_revoke_results.results | default([]) | selectattr('changed') | list | length) > 0 }}"
   when: openvpn_revoke_results is defined
 
-- name: Generate CRL if index is newer ({{ openvpn_vpn_name }})
-  command: ./easyrsa gen-crl
-  args:
-    chdir: "{{ easyrsa_dir }}"
-  environment: "{{ openvpn_ca_sign_env }}"
-  when: >
-    not openvpn_crl_stat.stat.exists
-    or (
-      openvpn_index_stat.stat.exists
-      and openvpn_index_stat.stat.mtime is defined
-      and openvpn_crl_stat.stat.mtime is defined
-      and openvpn_index_stat.stat.mtime > openvpn_crl_stat.stat.mtime
-    )
-    or (openvpn_revoke_changed | default(false))
-  notify: Restart OpenVPN server instance
-
 - name: Ensure OpenVPN server directory exists ({{ openvpn_vpn_name }})
   file:
     path: "{{ openvpn_server_dir }}"
@@ -332,6 +316,9 @@
     mode: "u=rwx,g=rwx,o="
   notify: Restart OpenVPN server instance
 
+- name: Configure and run CRL renewal ({{ openvpn_vpn_name }})
+  ansible.builtin.include_tasks: crl_renewal.yml
+
 - name: Copy PKI material into server dir ({{ openvpn_vpn_name }})
   copy:
     src: "{{ item.src }}"
@@ -351,8 +338,6 @@
       dest: "dh.pem"
     - src: "{{ easyrsa_dir }}/ta.key"
       dest: "ta.key"
-    - src: "{{ easyrsa_dir }}/pki/crl.pem"
-      dest: "crl.pem"
   notify: Restart OpenVPN server instance
 
 - name: Deploy OpenVPN server configuration ({{ openvpn_vpn_name }})

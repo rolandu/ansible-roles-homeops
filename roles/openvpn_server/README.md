@@ -10,14 +10,14 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
 ## Variables
 
 - `openvpn_config` (list, required): VPN definitions. Each entry supports:
-  - `vpn_name` (required): logical VPN name; used for systemd unit/config filenames and certificate CNs.
+  - `vpn_name` (required): logical VPN name; used for systemd unit/config filenames and certificate CNs. Start with a letter/digit and use only letters, digits, underscores or hyphens.
   - `server_hostname` (required): inventory/host name that should host this VPN (matched against `inventory_hostname`, `ansible_hostname`, or `ansible_fqdn`).
   - `network` / `netmask` (required): VPN subnet.
   - `port` (default: `1194`), `proto` (default: `udp`; valid options: `udp`, `tcp`), `dual_stack` (bool, default: `true`): when `true`, listeners use `udp6`/`tcp6` and clients get both `remote ... <proto>6` and `<proto>4`; when `false`, listeners use `udp4`/`tcp4` and clients get only `... <proto>4`.
   - `openvpn_remote_host` (string, required for clients): hostname/IP clients connect to (defaults to `server_hostname`).
   - Gateway LAN routing is defined per gateway client via `gateway_networks` (see clients list below); the role emits `route`/`iroute`/pull-filter bits as appropriate for client types.
   - `openvpn_full_tunnel` (bool, default: `false`): push `redirect-gateway` to clients.
-  - `openvpn_ca_passphrase` (required): passphrase to protect the CA key; no default.
+  - `openvpn_ca_passphrase` (required): nonempty single-line string protecting the CA key; no default.
   - `openvpn_mgmt_password` (required): password used to enable the management socket; the role writes a password file and adds a `management <bind> <port> <file>` line.
   - `openvpn_mgmt_port`, `openvpn_mgmt_bind` (optional): address/port for the management socket (only used when `openvpn_mgmt_password` is set; defaults: `127.0.0.1` / `7505`).
   - `openvpn_client_export_dir` (default: `/root/openvpn-clients`): server-side export path for generated client bundles.
@@ -54,6 +54,10 @@ Provision one or more community OpenVPN servers with EasyRSA PKI, per-client CCD
   - `openvpn_default_dns_domain` (default: `"."`): domain-route scope pushed when DNS servers are present.
   - `openvpn_default_dual_stack` (default: `true`)
 - `openvpn_force_restart_after_run` (bool, default: `false`): force the role's OpenVPN restart handler at the end of each configured server instance even when no managed files changed. Useful for testing reconnect behavior after OpenVPN restarts.
+- `openvpn_crl_renewal_enabled` (bool, default: `true`): enable daily unattended CRL renewal. Deployment and manual renewal remain available when disabled.
+- `openvpn_crl_renewal_schedule` (string, default: `"23 3 * * *"`): five-field numeric cron schedule in the server's local timezone.
+- `openvpn_crl_validity_days` (positive integer, default: `180`): validity of newly generated CRLs.
+- `openvpn_crl_renew_before_days` (positive integer, default: `30`): renew with this many days remaining; must be smaller than the validity period.
 - `artifacts_dir` (string, default: `{{ inventory_dir }}/artifacts`): base path on the controller for downloaded artifacts.
 - `openvpn_client_local_dir_base` (string, default: `{{ artifacts_dir }}/openvpn-clients`): base path on the controller for exported configs. Files land under `<base>/<vpn_name>/<vpn_name>_<client>.ovpn`.
 
@@ -127,7 +131,7 @@ A dedicated system user/group `openvpn` is created; the service runs as that use
 - `tls-crypt` with a per-VPN key (`ta.key`)
 - Require client certs (`verify-client-cert require`)
 - Enforce cert type checks (`remote-cert-tls client` / `remote-cert-tls server`)
-- Enable CRL validation (`crl-verify <openvpn_server_dir>/crl.pem`; CRL generated when missing or when the EasyRSA index changes)
+- Enable CRL validation (`crl-verify <openvpn_server_dir>/crl.pem`; CRL renewed when missing, invalid, near expiry, or when the EasyRSA index changes)
 - No password auth (no `auth-user-pass`)
 - Use client certs (`<ca>`, `<cert>`, `<key>`)
 - No static key mode (no `secret` directive)
@@ -136,6 +140,72 @@ A dedicated system user/group `openvpn` is created; the service runs as that use
 - Modern TLS 1.2 minimum (`tls-version-min 1.2`)
 - Management interface only accessible locally (`127.0.0.1` default when enabled)
 - UDP by default (configurable)
+
+## CRL renewal and recovery
+
+CRLs expire independently of client certificates. An expired CRL makes the server
+reject connections with `VERIFY ERROR: ... CRL has expired`, even while its
+systemd service is active. Restarting OpenVPN does not renew a CRL.
+
+The role installs OpenSSL, Python 3 and cron alongside OpenVPN/EasyRSA. Each
+deployment and the daily cron use the same renewal entrypoint. It renews a
+missing, unreadable or soon-expiring PKI CRL, or one older than the EasyRSA index;
+explicit revocations force regeneration. It also republishes a missing or stale
+server copy, including incorrect owner/group/mode. Renewal uses the existing CA
+and revocation index, preserving certificates and client bundles. A shared PKI lock prevents overlapping renewal
+runs. Signing failure leaves the deployed CRL untouched and exits nonzero.
+Check mode installs nothing and does not run the renewal entrypoint.
+
+For VPN `<vpn_name>`, the role manages:
+
+- `/usr/local/sbin/openvpn-crl-<vpn_name>`: root-owned entrypoint, mode `0700`.
+- `/etc/openvpn/crl-renewal/<vpn_name>.pass`: existing CA passphrase, root-owned
+  mode `0600`, inside a root-owned `0700` directory.
+- `/etc/cron.d/openvpn-crl-<vpn_name>`: explicit root cron entry.
+- `/var/log/openvpn-crl-<vpn_name>.log`: root-owned mode `0600`, with eight weekly
+  rotations managed by `/etc/logrotate.d/openvpn-crl-<vpn_name>`.
+- `<openvpn_server_dir>/crl.pem`: atomically published as `openvpn:openvpn`, mode
+  `0640`. OpenVPN rereads it on connections/renegotiation, so the renewal
+  entrypoint does not restart the service. Other role changes can still trigger
+  the existing restart handler during deployment.
+
+Unattended signing requires storing the CA passphrase on the VPN server that
+already holds the encrypted CA key. Root can read both. The role transfers this
+passphrase with `no_log: true`; EasyRSA receives only a `file:` reference, never
+the passphrase itself in arguments or output. Protect controller/Vault access
+and server root access accordingly. No additional input secret is needed.
+
+Run these commands on the server (substitute your VPN name and configured
+server directory):
+
+```bash
+# Read-only inspection: no signing, publication, or lock-file writes.
+sudo /usr/local/sbin/openvpn-crl-home --dry-run
+sudo openssl crl -in /etc/openvpn/server/crl.pem -noout -lastupdate -nextupdate
+
+# Real run: renew/publish only when needed; a second healthy run reports changed=false.
+sudo /usr/local/sbin/openvpn-crl-home
+
+# Force re-signing after an operator-managed revocation or for recovery.
+sudo /usr/local/sbin/openvpn-crl-home --force
+sudo tail -n 50 /var/log/openvpn-crl-home.log
+```
+
+Manual/deployment runs write their result to stdout; cron appends the same
+timestamped result to its dedicated log. Raw EasyRSA output is suppressed to
+keep signing diagnostics private. A failure reports a nonzero exit status;
+check CA password/PKI access and free disk space on the server before retrying.
+
+To recover an expired installation, update the installed collection and rerun
+the server role using an independent SSH route, then reconnect clients and check
+VPN reachability. The next role run repairs the CRL and installs daily renewal.
+Monitor the cron log and CRL expiry as part of normal service monitoring.
+
+Set `openvpn_crl_renewal_enabled: false` and rerun the role to remove its cron and
+logrotate files. The script, protected credential, historical log, and valid CRL
+remain for deployment/manual renewal. CRLs still expire; arrange regular role or
+manual runs if unattended renewal is disabled. Reverting the code alone does
+not remove previously deployed cron jobs. Revocation checking stays enabled.
 
 ## Running multiple servers on the same host
 Set unique values per VPN to avoid collisions:

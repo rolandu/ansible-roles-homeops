@@ -102,11 +102,15 @@ roles/openvpn_server/README.md: Role documentation for installing OpenVPN server
 roles/openvpn_server/defaults/main.yml: Default OpenVPN server instances, client definitions, addressing, DNS, certificate, and export settings.
 roles/openvpn_server/handlers/main.yml: Handlers for restarting OpenVPN server services after managed configuration changes.
 roles/openvpn_server/meta/main.yml: Role metadata for OpenVPN server management.
+roles/openvpn_server/tasks/crl_renewal.yml: Installs protected signing credentials and shared CRL renewal entrypoint, runs renewal, and manages cron/log rotation.
 roles/openvpn_server/tasks/export_client.yml: Per-client export tasks that render client configs and copy bundles to controller artifacts.
 roles/openvpn_server/tasks/main.yml: Entry point for validating OpenVPN server config and including server instance tasks.
 roles/openvpn_server/tasks/server_instance.yml: Per-server tasks for packages, PKI, server config, client directories, sysctl, firewall, and service setup.
 roles/openvpn_server/templates/ccd-client.j2: OpenVPN client-specific configuration template for routed client networks.
 roles/openvpn_server/templates/client.ovpn.j2: OpenVPN client profile template exported for client hosts or users.
+roles/openvpn_server/templates/crl-renewal-cron.j2: Daily root cron entry invoking the per-VPN CRL renewal entrypoint with private logging.
+roles/openvpn_server/templates/crl-renewal-logrotate.j2: Weekly rotation policy for the private per-VPN CRL renewal log.
+roles/openvpn_server/templates/renew-crl.py.j2: Locked expiry-aware EasyRSA CRL renewal and atomic publication with dry-run and forced signing modes.
 roles/openvpn_server/templates/server.conf.j2: OpenVPN server configuration template for listener, network, routes, DNS, and crypto settings.
 roles/resticprofile_backup/README.md: Multi-target inputs, Gatus reporting, security, scheduling, teardown, and manual workflow.
 roles/resticprofile_backup/defaults/main.yml: Default release, multi-target, Gatus, backup policy, retention, paths, logging, and cron settings.
